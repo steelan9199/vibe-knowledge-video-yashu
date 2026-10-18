@@ -10,22 +10,22 @@ async function main() {
     console.log("\x1b[36mChecking Git status...\x1b[0m");
     const status = runGit(["status", "--porcelain"]);
 
-    if (!status.trim()) {
+    if (status.trim()) {
+      // Add all changes
+      console.log("\x1b[36mAdding all changes...\x1b[0m");
+      runGit(["add", "."], { stdio: "inherit" });
+
+      // Commit
+      console.log("\x1b[36mCommitting changes...\x1b[0m");
+      runGit(["commit", "-m", message], { stdio: "inherit" });
+    } else {
+      // 没有新改动也要推：可能只是上次 push 失败了，本地还压着未推的提交
       console.log("\x1b[32mNo changes to commit\x1b[0m");
-      return;
     }
 
-    // Add all changes
-    console.log("\x1b[36mAdding all changes...\x1b[0m");
-    runGit(["add", "."], { stdio: "inherit" });
-
-    // Commit
-    console.log("\x1b[36mCommitting changes...\x1b[0m");
-    runGit(["commit", "-m", message], { stdio: "inherit" });
-
-    // Push
+    // Push（-u 兼容首次推送时没有 upstream 的分支）
     console.log("\x1b[36mPushing to GitHub...\x1b[0m");
-    runGit(["push"], { stdio: "inherit" });
+    runGit(["push", "-u", "origin", "HEAD"], { stdio: "inherit" });
 
     console.log("\x1b[32mSuccessfully pushed to GitHub!\x1b[0m");
 
