@@ -329,6 +329,8 @@ const DURATION = acc;
 window.__scenes = timeline.map(s => ({
   i: s.i, type: s.type, start: +s.start.toFixed(3), end: +s.end.toFixed(3), dur: s.dur,
   fx: s.fx ? s.fx.type : null,
+  // qa 采样点据此后移：有 anim 的屏入场更晚，按 72% 采会量到半透明的元素
+  anim: Array.isArray(s.anim) && s.anim.length ? 1 : 0,
 }));
 
 /* ---- 拆字 ---- */
@@ -859,6 +861,73 @@ function renderAt(t) {
   drawBeatLayer(beat);
   punchK = beat ? 1 + 0.013 * Math.exp(-beat.dt / 0.085) : 1;
   applyScale();
+
+  // 元素级时间线放在最后：它要覆盖上面那些默认入场值
+  applyAnims(active, p, el);
+}
+
+/* ============================================================
+   ⑤.5 元素级时间线 —— sc.anim
+   每项：{ target, delay, dur, stagger, dx, dy, blur, s0, o0, ease }
+   delay / dur / stagger 单位毫秒（屏内时间），dx/dy/blur 像素，s0 倍率。
+   只有被声明的元素受影响，未声明的继续走默认入场 —— 零 anim 的 story 行为不变。
+   ============================================================ */
+const EASE_FN = {
+  linear: k => k,
+  out:    k => 1 - Math.pow(1 - k, 3),
+  in:     k => k * k * k,
+  inout:  k => k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2,
+  expo:   k => k >= 1 ? 1 : 1 - Math.pow(2, -10 * k),
+};
+
+/** target → 该屏里的节点集合（多条 = 按 stagger 依次错时） */
+function animNodes(el, key) {
+  const one = (sel) => { const n = el.querySelector(sel); return n ? [n] : []; };
+  switch (key) {
+    case 'kicker': return one('.kicker');
+    case 'title':  return [...el.querySelectorAll('.title .ln, .qtext .ln')];
+    case 'chars':  return [...el.querySelectorAll('.title .ch, .qtext .ch')];
+    case 'body':   return one('.body');
+    case 'cite':   return one('.cite');
+    case 'label':  return one('.label');
+    case 'num':    return one('.num');
+    case 'unit':   return one('.unit');
+    case 'qmark':  return one('.qmark');
+    case 'rule':   return one('.rule');
+    case 'stack':  return one('.stack');
+    default:       return [];
+  }
+}
+
+function applyAnims(sc, p, el) {
+  const list = sc.anim;
+  if (!Array.isArray(list) || !list.length) return;
+  const durMs = Math.max(1, sc.dur * 1000);
+
+  for (const a of list) {
+    const nodes = animNodes(el, a.target);
+    if (!nodes.length) continue;
+
+    const ease = EASE_FN[a.ease] || EASE_FN.out;
+    const at = (a.delay || 0) / durMs;                                    // ms → 屏内进度
+    const span = Math.max(16, a.dur || (a.target === 'chars' ? 320 : 420)) / durMs;
+    const gap = (a.stagger || 0) / durMs;
+    const dx = a.dx || 0;
+    const dy = a.dy === undefined ? 26 : a.dy;
+    const blur = a.blur === undefined ? 10 : a.blur;
+    const s0 = a.s0 === undefined ? 1 : a.s0;
+    const o0 = a.o0 === undefined ? 0 : a.o0;
+
+    nodes.forEach((n, i) => {
+      const k = ease(clamp((p - at - i * gap) / span));
+      n.style.opacity = String(o0 + (1 - o0) * k);
+      const tf = [];
+      if (dx || dy) tf.push(`translate(${(1 - k) * dx}px,${(1 - k) * dy}px)`);
+      if (s0 !== 1) tf.push(`scale(${s0 + (1 - s0) * k})`);
+      n.style.transform = tf.length ? tf.join(' ') : 'none';
+      n.style.filter = (blur && k < 0.995) ? `blur(${(1 - k) * blur}px)` : 'none';
+    });
+  }
 }
 
 /* ============================================================

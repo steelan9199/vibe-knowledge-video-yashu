@@ -206,6 +206,8 @@ window.__scenes = SC.map((s) => ({
   type: s.layout === 'data' ? 'stat' : (s.layout || 'split'),
   start: s.start,
   dur: s.dur,
+  // qa 采样点据此后移：有 anim 的屏入场更晚，按 72% 采会量到半透明的元素
+  anim: Array.isArray(s.anim) && s.anim.length ? 1 : 0,
 }));
 
 /* ---------- 字符宽度（em 近似） ---------- */
@@ -339,6 +341,65 @@ function seek(t){
     ctx.lineCap = 'round';
     const fn = NODES[s.node];
     if (fn) fn(ctx, w, h, lt, s, T, ms);
+  }
+
+  // 元素级时间线放最后：它覆盖上面那些默认入场值
+  applyAnims(s, lt, s._el);
+}
+
+/* ---------- 元素级时间线 sc.anim ----------
+   每项：{ target, delay, dur, stagger, dx, dy, blur, s0, o0, ease }
+   delay / dur / stagger 单位毫秒（屏内时间）。只影响被声明的元素。 */
+const EASE_FN = {
+  linear: k => k,
+  out:    k => 1 - Math.pow(1 - k, 3),
+  in:     k => k * k * k,
+  inout:  k => k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2,
+  expo:   k => k >= 1 ? 1 : 1 - Math.pow(2, -10 * k),
+};
+
+function animNodes(el, key) {
+  const one = (sel) => { const n = el.querySelector(sel); return n ? [n] : []; };
+  switch (key) {
+    case 'kicker':   return one('.kick');
+    case 'kickerEn': return one('.kick .en');
+    case 'title':    return [...el.querySelectorAll('.title .ln>b')];
+    case 'body':     return [...el.querySelectorAll('.body .ln>b')];
+    case 'node':     return one('canvas.node');
+    case 'foot':     return one('.foot');
+    case 'idx':      return one('.idx');
+    default:         return [];
+  }
+}
+
+function applyAnims(s, lt, el) {
+  const list = s.anim;
+  if (!Array.isArray(list) || !list.length || !el) return;
+  const durMs = Math.max(1, s.dur * 1000);
+
+  for (const a of list) {
+    const nodes = animNodes(el, a.target);
+    if (!nodes.length) continue;
+
+    const ease = EASE_FN[a.ease] || EASE_FN.out;
+    const at = (a.delay || 0) / durMs;
+    const span = Math.max(16, a.dur || 420) / durMs;
+    const gap = (a.stagger === 0 ? 0 : (a.stagger === undefined ? 67 : a.stagger)) / durMs;
+    const dx = a.dx || 0;
+    const dy = a.dy === undefined ? 28 : a.dy;
+    const blur = a.blur === undefined ? 0 : a.blur;
+    const s0 = a.s0 === undefined ? 1 : a.s0;
+    const o0 = a.o0 === undefined ? 0 : a.o0;
+
+    nodes.forEach((n, i) => {
+      const k = ease(clamp((lt - at - i * gap) / span));
+      n.style.opacity = String(o0 + (1 - o0) * k);
+      const tf = [];
+      if (dx || dy) tf.push(`translate(${(1 - k) * dx}px,${(1 - k) * dy}px)`);
+      if (s0 !== 1) tf.push(`scale(${s0 + (1 - s0) * k})`);
+      n.style.transform = tf.length ? tf.join(' ') : 'none';
+      n.style.filter = (blur && k < 0.995) ? `blur(${(1 - k) * blur}px)` : 'none';
+    });
   }
 }
 

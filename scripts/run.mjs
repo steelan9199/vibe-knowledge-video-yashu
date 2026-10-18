@@ -41,6 +41,9 @@ const BGM_OFF = ['none', 'off', 'false'].includes(BGM_RAW);
 const BGM = BGM_RAW && !BGM_OFF ? path.resolve(BGM_RAW) : null; // 不传则用 assets/bgm 自带神曲
 const DRAFT = has('draft');
 const CRF = arg('crf');
+const WORKERS = arg('workers');
+const FORMAT = arg('format');
+const QUALITY = arg('quality');
 // 画幅：portrait（默认 1080×1920）/ wide（1920×1080）。build 选模板，render 定视口，必须一起传
 const ASPECT = arg('aspect');
 const ASPECT_ARGS = ASPECT ? ['--aspect', ASPECT] : [];
@@ -74,8 +77,11 @@ const rArgs = ['--html', HTML, '--out', OUT, '--quiet', ...ASPECT_ARGS];
 if (BGM) rArgs.push('--bgm', BGM);
 else if (BGM_OFF) rArgs.push('--bgm', 'none');
 if (CRF) rArgs.push('--crf', CRF);
+if (WORKERS) rArgs.push('--workers', WORKERS);
+if (FORMAT) rArgs.push('--format', FORMAT);
+if (QUALITY) rArgs.push('--quality', QUALITY);
 if (DRAFT) rArgs.push('--step', '15');
-process.stderr.write(`\n▸ ③ 渲染（${DRAFT ? '1/15 抽帧试片' : '全帧'}，约 ${DRAFT ? '30 秒' : '5–10 分钟'}）\n`);
+process.stderr.write(`\n▸ ③ 渲染（${DRAFT ? '1/15 抽帧试片' : '全帧 · 并行'}，约 ${DRAFT ? '20 秒' : '1–2 分钟'}）\n`);
 const r = spawnSync(process.execPath, [script('render.mjs'), ...rArgs], { encoding: 'utf8' });
 if (r.status !== 0) {
   console.error(`\n✗ 渲染失败：\n${(r.stderr || '').slice(-1200)}`);
@@ -95,7 +101,8 @@ const secs = (() => {
   } catch { return '?'; }
 })();
 
-console.log(`\n✓ 完成 ${secs}s · ${info.frames || '?'} 帧 · ${mb}MB · 音轨 ${info.bgm || '?'} · 用时 ${mark()}`);
+console.log(`\n✓ 完成 ${secs}s · ${info.frames || '?'} 帧 · ${mb}MB · 音轨 ${info.bgm || '?'}`
+  + ` · ${info.workers || '?'} 并发 · ${info.msPerFrame || '?'}ms/帧 · 用时 ${mark()}`);
 console.log(`  ${OUT}${SHEET ? `\n  联系图 ${SHEET}` : ''}`);
 // 自进化协议的触发器：每次都出现，避免「想起来才沉淀」
 console.log('  ▸ 有新事实？selfcheck.mjs → learn.mjs add → push.js "learn: …"（SKILL.md §9）');

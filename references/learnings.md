@@ -22,6 +22,18 @@
 
 ---
 
+### 2026-10-18 · N 个 tab 并行反而不比单 tab 快（6 tab 194ms/帧 vs 单 tab 131ms/帧）
+- 现象：N 个 tab 并行反而不比单 tab 快（6 tab 194ms/帧 vs 单 tab 131ms/帧）
+- 根因：同一浏览器的所有 tab 共享一个 GPU 进程，合成与 JPEG 编码在那条队列里全局串行
+- 改动：scripts/render.mjs 改成 launchBrowser：一个 worker 一个浏览器进程，各带独立 user-data-dir
+- 判据：workers=6 --limit 120 的 msPerFrame 应低于 workers=1 的 1/4
+
+### 2026-10-18 · 并行渲染时进度停在某帧不动，无报错、进程不退
+- 现象：并行渲染时进度停在某帧不动，无报错、进程不退
+- 根因：同一浏览器里多个 tab，非前台 tab 的 requestAnimationFrame 被暂停，seekExpr 的双 rAF 永不 resolve
+- 改动：openTab 里加 Page.setWebLifecycleState(active) + Emulation.setFocusEmulationEnabled
+- 判据：workers=2 --limit 30 能在 10 秒内出片
+
 ### 2026-10-18 · 横屏 center/data/formula 版式正文第二行压到抖音底部进度条
 - 现象：横屏 center/data/formula 版式正文第二行压到抖音底部进度条
 - 根因：按一行正文的高度算 top，两行时多出整整 78px；center/data 原 top:800 两行底边 956>940，formula 原 top:870 底边 1006，超 68px

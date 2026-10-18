@@ -3,6 +3,7 @@
 把一段文案做成抖音「vibe 知识大赏」风格的知识视频。
 默认竖屏 1080×1920，加 `--aspect wide` 出横屏 1920×1080。
 零外部依赖：Node 22 + 无头 Edge/Chrome + ffmpeg。
+渲染是并行的：`seek(t)` 是纯函数 → 6 个 tab 分连续块跑（默认 JPEG q95），60s 片子约 1 分钟。
 
 本目录同时是 WorkBuddy 技能运行目录和 git 仓库：
 `~/.workbuddy/skills/vibe-knowledge-video-yashu/`。改完即生效，无需部署。

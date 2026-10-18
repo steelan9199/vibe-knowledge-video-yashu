@@ -123,6 +123,79 @@ function estMetry(kind, text) {
   return { px, width: em * px, avail: b.avail, fit: px >= b.floor };
 }
 
+// ---------------------------------------------------------------- 元素级时间线
+/** 两个画幅的 target 集合不同：模板里没有的元素，写了也不会报错，只会静默不生效 */
+const ANIM_TARGETS = {
+  portrait: ['kicker', 'title', 'chars', 'body', 'cite', 'label', 'num', 'unit', 'qmark', 'rule', 'stack'],
+  wide:     ['kicker', 'kickerEn', 'title', 'body', 'node', 'foot', 'idx'],
+};
+const ANIM_FIELDS = ['target', 'delay', 'dur', 'stagger', 'dx', 'dy', 'blur', 's0', 'o0', 'ease'];
+const ANIM_EASE = ['linear', 'out', 'in', 'inout', 'expo'];
+const ANIM_LIMIT = {
+  delay: [-2000, 6000], dur: [80, 2400], stagger: [0, 400],
+  dx: [-400, 400], dy: [-400, 400], blur: [0, 60], s0: [0.5, 1.5], o0: [0, 1],
+};
+
+/**
+ * anim 是「覆盖默认入场」的声明式时间线。这里只拦两类错：
+ *  ① 字段/target 拼错 —— 模板对未知 target 是静默 return，不校验就会变成
+ *     "写了 anim 但画面没变"这种翻遍日志也查不出的问题。
+ *  ② 入场结束得太晚 —— 越过屏的 3/4 会先看到一段空白，再看到字冒出来。
+ */
+function validateAnim(where, sc, aspect) {
+  const list = sc.anim;
+  if (list === undefined) return;
+  if (!Array.isArray(list)) {
+    err(`${where}.anim`, 'anim 不是数组', '[{ "target": "title", "delay": 120, "dur": 420 }]');
+    return;
+  }
+  if (!list.length) return;
+  if (list.length > 6) {
+    err(`${where}.anim`, `${list.length} 条 anim，超过 6 条`, '一屏最多强调 6 个元素，再多等于没有节奏');
+  }
+
+  const durMs = (Number(sc.dur) || 6) * 1000;
+  const allowed = ANIM_TARGETS[aspect];
+  const textSrc = sc.quote ?? sc.title ?? '';
+
+  list.forEach((a, j) => {
+    const at = `${where}.anim[${j}]`;
+    if (!a || typeof a !== 'object' || Array.isArray(a)) {
+      err(at, '不是对象', '{ "target": "title", "delay": 120 }');
+      return;
+    }
+    for (const k of Object.keys(a)) {
+      if (!ANIM_FIELDS.includes(k)) err(`${at}.${k}`, `未知字段 "${k}"`, `可选用：${ANIM_FIELDS.join(' / ')}`);
+    }
+    if (!a.target) err(`${at}.target`, '缺 target', `可选用：${allowed.join(' / ')}`);
+    else if (!allowed.includes(a.target)) {
+      err(`${at}.target`, `${aspect === 'wide' ? '横屏' : '竖屏'}没有 "${a.target}"`,
+        `可选用：${allowed.join(' / ')}`);
+    }
+    for (const [k, [lo, hi]] of Object.entries(ANIM_LIMIT)) {
+      if (a[k] === undefined) continue;
+      const v = Number(a[k]);
+      if (!Number.isFinite(v)) err(`${at}.${k}`, `"${a[k]}" 不是数字`, `写成 ${lo}–${hi} 之间的数`);
+      else if (v < lo || v > hi) err(`${at}.${k}`, `${v} 超出 ${lo}–${hi}`, '按毫秒 / 像素量级重写');
+    }
+    if (a.ease !== undefined && !ANIM_EASE.includes(a.ease)) {
+      err(`${at}.ease`, `未知缓动 "${a.ease}"`, `可选用：${ANIM_EASE.join(' / ')}`);
+    }
+
+    const delay = Number(a.delay) || 0;
+    const span = a.dur === undefined ? (a.target === 'chars' ? 320 : 420) : Number(a.dur);
+    const gap = Number(a.stagger) || 0;
+    const rows = a.target === 'title' ? Math.max(1, toLines(textSrc).length)
+      : a.target === 'chars' ? Math.max(1, charCount(toLines(textSrc).join('')))
+      : 1;
+    const done = delay + span + gap * Math.max(0, rows - 1);
+    if (done > durMs * 0.75) {
+      warn(at, `入场到 ${(done / 1000).toFixed(2)}s 才结束（屏长 ${(durMs / 1000).toFixed(2)}s）`, 
+        `delay 压到 ${Math.max(0, Math.round(durMs * 0.5 - span))}ms 以内，否则先空一段再出字`);
+    }
+  });
+}
+
 // ---------------------------------------------------------------- 校验
 const errors = [];
 const warns = [];
@@ -216,6 +289,8 @@ function validate(story) {
       const bodyLines = toLines(sc.body).length;
       if (bodyLines > 2) err(`${w}.body`, '带图形的场景正文超过 2 行', '图形占了下半区，正文只能给 2 行');
     }
+
+    validateAnim(w, sc, 'portrait');
   });
 
   if (total < DUR.totalMin) warn('scenes', `总时长 ${total}s < ${DUR.totalMin}s`, '抖音知识类完播友好区间 40–70s');
@@ -310,6 +385,8 @@ function validateWide(story, period, enums) {
     if (sc.kicker && emWidth(sc.kicker) > WIDE_BUDGET.kickerEm) {
       err(`${w}.kicker`, `宽 ${emWidth(sc.kicker).toFixed(1)} 字 > ${WIDE_BUDGET.kickerEm} 字`, '眉标是标签不是句子');
     }
+
+    validateAnim(w, sc, 'wide');
   });
 
   if (total < WIDE_BUDGET.totalMin) warn('scenes', `总时长 ${total.toFixed(2)}s < ${WIDE_BUDGET.totalMin}s`, '横屏完播友好区间 50–65s');

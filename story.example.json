@@ -11,7 +11,10 @@
       "kicker": "信息论 · 第一讲",
       "title": ["你刷到的每一条", "都是<em>猜不到</em>的"],
       "body": "信息量的大小，\n和你说了多少字无关。",
-      "fx": { "type": "particles", "n": 70, "seed": 11 }
+      "fx": { "type": "particles", "n": 70, "seed": 11 },
+      "anim": [
+        { "target": "chars", "delay": 80, "dur": 300, "stagger": 18, "blur": 14 }
+      ]
     },
     {
       "type": "quote",
@@ -26,7 +29,11 @@
       "kicker": "SETUP",
       "title": ["八个格子", "藏一个数字"],
       "body": "我心里想 1 到 8 的一个数。\n每问一次是非题，排除一半。",
-      "fx": { "type": "grid", "cols": 4, "rows": 2, "cell": 168, "gap": 40, "highlight": 5 }
+      "fx": { "type": "grid", "cols": 4, "rows": 2, "cell": 168, "gap": 40, "highlight": 5 },
+      "anim": [
+        { "target": "title", "delay": 160, "dur": 380, "stagger": 140, "dy": 36 },
+        { "target": "body",  "delay": 900, "dur": 360 }
+      ]
     },
     {
       "type": "stat",

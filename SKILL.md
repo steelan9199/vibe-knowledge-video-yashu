@@ -1,7 +1,7 @@
 ---
 name: vibe-knowledge-video-yashu
 description: 把一段文案做成抖音「vibe 知识大赏」风格的竖屏知识视频（1080x1920 MP4）。用户给出文案、观点或选题，输出可直接发布的知识短视频。触发词：vibe知识、知识大赏、知识视频、把这段文案做成视频、竖屏知识视频、生成知识短视频、文案转视频。
-version: 1.7.0
+version: 1.8.0
 ---
 
 # Vibe 知识视频生成器
@@ -9,7 +9,7 @@ version: 1.7.0
 ## 0. 五条铁律
 
 1. **不靠看图改稿。** 1080×1920 截图 ≈ 1.5k token/张。排版问题一律由 `qa.mjs` 用几何测量输出，模型只读几十行文字结论。
-2. **先过校验再渲染。** `build.mjs` 在写文案阶段就拦截溢出；全片渲染 3–5 分钟，不要用它当调试器。
+2. **先过校验再渲染。** `build.mjs` 在写文案阶段就拦截溢出；全片渲染 1–2 分钟（并行 6 tab），依然不要用它当调试器。
 3. **一轮只改 story.json。** 改文案 → 重跑 build/qa，不碰模板、不碰脚本。
 4. **做完一片必须自省一次。** 发现更优做法或代码/文档错误，**当场改掉并记一条**，不等用户开口。见 §9 自进化协议。**凡改了本仓库文件，就升一次 version 并 push**（§9 第五步）。
 5. **小字必须看得清。** <48px 的文字一律 ≥9:1 对比度 + 500 字重（`qa.mjs` 的 `low-contrast` 卡这条）。大字号白给、小字糊掉，是这类片子最常见的翻车。
@@ -34,7 +34,7 @@ version: 1.7.0
 story.json
   ↓ ② build.mjs   → 容量校验 + 注入 → out/story.html
   ↓ ③ qa.mjs      → 排版体检（0 错才继续）
-  ↓ ④ render.mjs  → 逐帧截图 + ffmpeg → out/final.mp4
+  ↓ ④ render.mjs  → N tab 并行截图 + 帧完整性校验 + ffmpeg → out/final.mp4
   ↓ ⑤ qa.mjs --video → 黑屏/静帧终检
 ```
 
@@ -88,6 +88,37 @@ story.json
 hook → quote → scene → stat → scene → scene → outro
 1      1        2-3             1-2              1
 ```
+
+### 元素级时间线 `anim`（可选）
+
+默认入场写死在模板里（眉标 0ms、标题逐字、正文在屏的 30% 处）。要改节奏就加 `anim`——**只覆盖被声明的元素，没写的屏行为完全不变**，可以逐屏加：
+
+```json
+"anim": [
+  { "target": "title", "delay": 160, "dur": 380, "stagger": 140, "dy": 36 },
+  { "target": "body",  "delay": 900, "dur": 360 }
+]
+```
+
+| 字段 | 默认 | 说明 |
+|---|---|---|
+| `target` | 必填 | 竖屏 `kicker` `title` `chars` `body` `cite` `label` `num` `unit` `qmark` `rule` `stack`；横屏 `kicker` `kickerEn` `title` `body` `node` `foot` `idx` |
+| `delay` | 0 | 毫秒，相对屏起点（负值 = 提前） |
+| `dur` | 420（`chars` 320） | 毫秒，单元素入场时长 |
+| `stagger` | 0（横屏 67） | 毫秒，同组元素依次错时：`title` 按行、`chars` 按字 |
+| `dx` / `dy` | 0 / 26 | 起点位移 px（横屏 dy 28） |
+| `blur` | 10（横屏 0） | 起点模糊 px |
+| `s0` | 1 | 起点缩放，如 0.94 = 轻微推近 |
+| `o0` | 0 | 起点透明度 |
+| `ease` | `out` | `linear` / `out` / `in` / `inout` / `expo` |
+
+三条规矩：
+
+1. **`title` 和 `chars` 不要同时声明。** 前者作用于行 `.ln`、后者作用于字 `.ch`，两个 opacity 相乘 → 双重淡入，字会「糊两遍」。
+2. **一屏最多 6 条，入场必须在屏长 75% 前结束。** build 会警告；越线就是「先空一段再出字」。
+3. **未知 `target` / 字段名直接报错。** 模板对未知 target 是静默 return，不拦就会变成「写了 anim 但画面没变」这种查不出来的问题。
+
+`anim` 是纯函数 `seek(t)` 的一部分（只依赖屏内进度），并行渲染和确定性都不受影响。
 
 ### 横屏 1920×1080：另一套 story 结构
 
@@ -168,8 +199,18 @@ node scripts/render.mjs --html out/story.html --out out/final.mp4 --quiet [--asp
 | `--bgm 别的歌.mp3` | 换配乐，**同时要重跑 `beat.mjs`** 重新算卡点 |
 | `--no-beat` | 保留配乐但不卡点，用 story 里写的原始时长 |
 | `--draft` | 2fps 试片，30 秒出结果，看节奏用 |
-| `--settle 40` | 每帧截图前等待的毫秒数（默认 40）。**调小会闪帧**，机器过载时调大到 70 |
+| `--settle 40` | 每帧截图前等待的毫秒数（默认 40）。**调小会闪帧**。并行下不必调大；成片确有闪帧时才用 70 且把 `--workers` 降到 4 |
 | `--sheet out/sheet.png` | 附带联系图（约 1.7k token） |
+| `--workers 6` | 并发 tab 数。默认 `min(6, CPU/2)`；`--workers 1` 退回串行（排错用） |
+| `--format png` | 改用 PNG 序列。默认 `jpeg q95` |
+| `--quality 97` | JPEG 质量，默认 95 |
+
+**渲染是并行的，不是逐帧排队。** `seek(t)` 是纯函数 → 任意帧可独立渲 → 开 N 个 tab 分连续块跑。1080×1920 / 60s 的片子从 ~9 分钟降到 1 分钟级。
+
+两件事必须知道：
+
+- **默认 JPEG q95**，不是 PNG。1080p PNG 单帧 1.5–3MB，base64 过 CDP 是串行时代的主要成本。深色细线（1px 结构线、低亮渐变）若出现色带，改 `--format png` 重渲，不要调低 quality。
+- **渲染结束会校验帧完整性**：缺帧、帧体积 <2KB（疑似黑帧）直接失败退出，不会让 ffmpeg 把成片悄悄缩短。并行唯一的新失败模式就是「某个 tab 崩了」，这一步专门拦它。
 
 **需要目检风格时**加 `--sheet`，把全部场景拼成一张联系图，而不是逐屏截图（每张 1.5k token）：
 
@@ -322,7 +363,7 @@ qa 对画幅不敏感：**画幅、安全区、选择器全部从页面自身读
 | `scripts/verify-beats.mjs` | 独立校验节拍表：三频段分离 + 网格拟合 + 鼓组证据 | 怀疑卡点不准 / 换新配乐时先跑它 |
 | `scripts/make-drum-track.mjs` | 合成"鼓点真值已知"的基准音轨（96BPM） | 配乐没有可用节拍时 |
 | `scripts/qa.mjs` | 几何体检 / 联系图 / 黑屏终检 | 判定阈值不合理时才动 |
-| `scripts/render.mjs` | 无头浏览器逐帧截图 + ffmpeg 合成 | 改分辨率/帧率/音轨时 |
+| `scripts/render.mjs` | N tab 并行截图（默认 JPEG q95）+ 帧完整性校验 + ffmpeg 合成 | 改并发/画质/分辨率/音轨时 |
 | `scripts/learn.mjs` | 写经验日志（自进化用） | 每次有可复用发现时 |
 | `scripts/selfcheck.mjs` | 自检：语法 / 文档引用 / 规格数字 / 日志格式 / 回归 | 每次改完代码或文档后 |
 | `assets/template.html` | 1080×1920 分镜模板（唯一视觉来源） | 只有换整片风格才动 |

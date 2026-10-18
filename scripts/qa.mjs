@@ -428,7 +428,10 @@ try {
 
   const shots = [];
   for (const sc of scenes) {
-    const t = (sc.start + sc.dur * SAMPLE_AT) / duration;
+    // 有 anim 的屏把采样点推到 88%：默认 72% 会量到还在入场途中的元素，
+    // 半透明元素被 MEASURE 跳过 → 这一屏等于没体检（不报错，最难发现的那种）
+    const at = sc.anim ? 0.88 : SAMPLE_AT;
+    const t = (sc.start + sc.dur * at) / duration;
     await ev(`(async()=>{window.seek(${t.toFixed(6)});await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));return true})()`);
     const m = JSON.parse(await ev(MEASURE));
     density.push({ scene: `S${sc.i + 1}`, type: sc.type, ratio: +judge(sc, m).toFixed(1) });
