@@ -1,7 +1,7 @@
 ---
 name: vibe-knowledge-video-yashu
 description: 把一段文案做成抖音「vibe 知识大赏」风格的竖屏知识视频（1080x1920 MP4）。用户给出文案、观点或选题，输出可直接发布的知识短视频。触发词：vibe知识、知识大赏、知识视频、把这段文案做成视频、竖屏知识视频、生成知识短视频、文案转视频。
-version: 1.0.0
+version: 1.1.0
 ---
 
 # Vibe 知识视频生成器
@@ -79,7 +79,7 @@ story.json
 | `quote` | 最多 3 行，每行 ≤ 12 字 |
 | `label` | stat 的说明，最多 2 行，每行 ≤ 18 字 |
 | `kicker` | 顶部小标，≤ 26 个字符宽度（中文 1、拉丁 0.55） |
-| `fx.type` | `particles` 氛围粒子 / `grid` 可能性网格 / `curve` 曲线 / `flow` 回路图 / `bars` 分布 |
+| `fx.type` | `particles` 氛围粒子 / `grid` 可能性网格 / `curve` 曲线 / `flow` 回路图 / `bars` 分布。**grid / curve / flow 自带信息论题材的默认文案**（`log₂ 8 = 3`、"发生概率 p"、"推荐模型"…），换题材要么覆写：`fx.caption`(grid) · `fx.xLabel`/`fx.yLabel`/`fx.xTag`/`fx.yTag`(curve) · `fx.labels`(flow 四节点，传 `""` 可隐藏)，要么改用 `particles`/`bars`——画布上的字不报错，只会文不对题 |
 
 **场景配比（45–70 秒，6–8 屏）**
 
@@ -258,7 +258,7 @@ node scripts/selfcheck.mjs --regress
 
 它查七件事：脚本能否解析 · 文档引用的文件是否存在 · 安全区数字模板与文档是否一致 ·
 日志格式与条数 · 样例是否合法 · `version` 是否存在且为 `x.y.z` · 旧样例 build+qa 是否仍全过。
-通过只要一行 `[check] 通过（v1.0.0 · …）`，前缀就是当前版本号。
+通过只要一行 `[check] 通过（v1.1.0 · …）`，前缀就是当前版本号。
 
 **不通过就不提交。** 这一步是在拦"改完文档忘了改代码"这类不会报错的漂移。
 

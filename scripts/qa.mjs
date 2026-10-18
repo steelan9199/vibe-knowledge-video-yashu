@@ -190,7 +190,8 @@ function judge(sc, m) {
   const textArea = m.blocks.filter(x => TEXTY.includes(x.kind)).reduce((a, x) => a + x.rect.w * x.rect.h, 0);
   const ratio = textArea / (W * H) * 100;
   if (ratio > 34) add('warn', 'too-dense', tag, `文字覆盖 ${ratio.toFixed(0)}% 画面`, '拆场景，信息量过大');
-  if (ratio < 2.5) add('warn', 'too-sparse', tag, `文字仅覆盖 ${ratio.toFixed(0)}% 画面`, '画面偏空，可加一句或加大字号');
+  // stat 屏的主体是一个 300px+ 的大数字，面积占比天然很低——按文字密度判空是误报
+  if (ratio < 2.5 && sc.type !== 'stat') add('warn', 'too-sparse', tag, `文字仅覆盖 ${ratio.toFixed(0)}% 画面`, '画面偏空，可加一句或加大字号');
   return ratio;
 }
 

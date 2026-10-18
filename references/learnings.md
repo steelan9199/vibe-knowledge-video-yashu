@@ -22,6 +22,18 @@
 
 ---
 
+### 2026-10-18 · stat 屏每次都被 qa 判 too-sparse（文字覆盖 2%），但画面正常
+- 现象：stat 屏每次都被 qa 判 too-sparse（文字覆盖 2%），但画面正常
+- 根因：密度判据只看文字块面积，stat 的主体是 300px 大数字，面积占比天然极低
+- 改动：scripts/qa.mjs：too-sparse 对 sc.type === 'stat' 豁免
+- 判据：node scripts/selfcheck.mjs --regress（样例含 stat 屏，应 0 警）
+
+### 2026-10-18 · 非信息论题材用 grid/curve/flow，画面上冒出 log₂ 8=3、发生概率 p、推荐模型等无关文字
+- 现象：非信息论题材用 grid/curve/flow，画面上冒出 log₂ 8=3、发生概率 p、推荐模型等无关文字
+- 根因：模板把坐标轴/节点/说明文案写死在画布绘制代码里，build 与 qa 都不检查画布文字
+- 改动：assets/template.html：grid 加 cfg.caption、curve 加 xLabel/yLabel/xTag/yTag、flow 加 labels 覆写，默认值保持原样；SKILL.md §2 fx 行写明约束
+- 判据：node scripts/build.mjs --story story.example.json --out out/x.html && node scripts/qa.mjs --html out/x.html
+
 ### 2026-10-18 · 文档与代码漂移无任何报错
 - 现象：文档与代码漂移无任何报错
 - 根因：SKILL.md 写着 scripts/xxx 或安全区数字，代码改了文档没改，读的人照旧用法执行

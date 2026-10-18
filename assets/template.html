@@ -509,17 +509,24 @@ const FX = {
       ctx.restore();
     }
 
-    ctx.save();
-    ctx.globalAlpha = prog(p, 0.68, 0.9) * 0.8;
-    ctx.fillStyle = '#6F695C';
-    ctx.font = F_HEI;
-    ctx.textAlign = 'center';
-    ctx.fillText('8 POSSIBILITIES   ·   log₂ 8 = 3', W / 2, y0 + totalH + 76);
-    ctx.restore();
+    const cap = cfg.caption === undefined ? '8 POSSIBILITIES   ·   log₂ 8 = 3' : cfg.caption;
+    if (cap) {
+      ctx.save();
+      ctx.globalAlpha = prog(p, 0.68, 0.9) * 0.8;
+      ctx.fillStyle = '#6F695C';
+      ctx.font = F_HEI;
+      ctx.textAlign = 'center';
+      ctx.fillText(cap, W / 2, y0 + totalH + 76);
+      ctx.restore();
+    }
   },
 
   curve(p, cfg) {
     const kind = cfg.kind || 'entropy';
+    const xTag = cfg.xTag === undefined ? 'p' : cfg.xTag;
+    const yTag = cfg.yTag === undefined ? 'H' : cfg.yTag;
+    const xLabel = cfg.xLabel === undefined ? '发生概率 p' : cfg.xLabel;
+    const yLabel = cfg.yLabel === undefined ? '信息量 H(p)' : cfg.yLabel;
     const x0 = 210, x1 = 880;
     const yBase = H * 0.745, yTop = H * 0.535;
     const f = u => {
@@ -584,9 +591,9 @@ const FX = {
       ctx.fillStyle = '#B4AC9C';
       ctx.font = F_HEI;
       ctx.textAlign = 'center';
-      ctx.fillText('p ' + u.toFixed(2), px, yBase + 40);
+      ctx.fillText(xTag + ' ' + u.toFixed(2), px, yBase + 40);
       ctx.textAlign = 'left';
-      ctx.fillText('H ' + f(u).toFixed(2), px + 24, py - 18);
+      ctx.fillText(yTag + ' ' + f(u).toFixed(2), px + 24, py - 18);
       ctx.restore();
     }
 
@@ -595,18 +602,19 @@ const FX = {
     ctx.fillStyle = '#6F695C';
     ctx.font = F_HEI;
     ctx.textAlign = 'center';
-    ctx.fillText('发生概率 p', (x0 + x1) / 2, yBase + 92);
+    if (xLabel) ctx.fillText(xLabel, (x0 + x1) / 2, yBase + 92);
     ctx.translate(x0 - 74, (yBase + yTop) / 2); ctx.rotate(-Math.PI / 2);
-    ctx.fillText('信息量 H(p)', 0, 0);
+    if (yLabel) ctx.fillText(yLabel, 0, 0);
     ctx.restore();
   },
 
-  flow(p) {
+  flow(p, cfg) {
+    const L = cfg.labels || [];
     const nodes = [
-      { x: 300, y: H * 0.575, label: '你的点击' },
-      { x: 800, y: H * 0.515, label: '推荐模型' },
-      { x: 800, y: H * 0.665, label: '同类内容' },
-      { x: 300, y: H * 0.725, label: '又一条' },
+      { x: 300, y: H * 0.575, label: L[0] || '你的点击' },
+      { x: 800, y: H * 0.515, label: L[1] || '推荐模型' },
+      { x: 800, y: H * 0.665, label: L[2] || '同类内容' },
+      { x: 300, y: H * 0.725, label: L[3] || '又一条' },
     ];
     const edges = [[0, 1], [1, 2], [2, 3], [3, 1]];
     const k = easeInOut(prog(p, 0.06, 0.70));
@@ -649,7 +657,7 @@ const FX = {
       ctx.fillStyle = '#B4AC9C';
       ctx.font = F_HEI_S;
       ctx.textAlign = 'center';
-      ctx.fillText(n.label, n.x, n.y + 64);
+      if (n.label) ctx.fillText(n.label, n.x, n.y + 64);
       ctx.restore();
     });
   },
