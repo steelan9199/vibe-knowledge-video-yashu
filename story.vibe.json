@@ -1,0 +1,65 @@
+{
+  "meta": {
+    "series": "开智小曲 · 拆解",
+    "handle": "@Musk",
+    "startIndex": 1
+  },
+  "scenes": [
+    {
+      "type": "hook",
+      "dur": 8.5,
+      "kicker": "VIBE 知识大赏",
+      "title": ["刷到第三条", "你已经会<em>哼</em>了"],
+      "body": "一段没有歌词的音频，\n成了十月最硬的通货。",
+      "fx": { "type": "particles", "n": 70, "seed": 11 }
+    },
+    {
+      "type": "stat",
+      "dur": 8.5,
+      "kicker": "速度",
+      "stat": { "from": 0, "to": 113, "decimals": 0, "unit": "BPM" },
+      "label": "正好是走路的速度。\n一拍，就是一步。"
+    },
+    {
+      "type": "scene",
+      "dur": 8.5,
+      "kicker": "循环",
+      "title": ["整首歌", "几乎就是这<em>8.5 秒</em>"],
+      "body": "16 拍转一圈，\n从第 17 秒起转了 15 圈。",
+      "fx": { "type": "bars", "n": 15 }
+    },
+    {
+      "type": "scene",
+      "dur": 8.5,
+      "kicker": "踏板音",
+      "title": ["和弦在换", "低音钉死在 <em>F</em>"],
+      "body": "踏板音，稳到让人发慌，\n注意力全留给了字和画。",
+      "fx": { "type": "particles", "n": 40, "seed": 7 }
+    },
+    {
+      "type": "scene",
+      "dur": 8.5,
+      "kicker": "回家",
+      "title": ["间奏里", "它才<em>动一次</em>"],
+      "body": "D♭ 到 E♭ 到 F，\n一级一级爬回家。",
+      "fx": { "type": "particles", "n": 34, "seed": 29 }
+    },
+    {
+      "type": "scene",
+      "dur": 8.5,
+      "kicker": "奖励",
+      "title": ["你猜得到下一拍", "大脑就<em>奖励</em>你"],
+      "body": "奖励来自差一点，\n不是刚刚好。",
+      "fx": { "type": "particles", "n": 46, "seed": 23 }
+    },
+    {
+      "type": "outro",
+      "dur": 8.5,
+      "kicker": "SO",
+      "title": ["下次刷到", "先听那个 <em>F</em>"],
+      "body": "它不动，\n你的注意力才留得住。",
+      "cite": "112.9 BPM · 8.5s LOOP · PEDAL F",
+      "fx": { "type": "particles", "n": 40, "seed": 5 }
+    }
+  ]
+}

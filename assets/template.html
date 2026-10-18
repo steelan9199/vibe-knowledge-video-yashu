@@ -83,6 +83,8 @@
   }
 
   #fx{ position:absolute; inset:0; width:1080px; height:1920px; }
+  /* 节拍层：每拍冲击波 / 边缘闪光 / 左侧拍格。只在注入 __BEATS__ 时工作 */
+  #beatcv{ position:absolute; inset:0; width:1080px; height:1920px; pointer-events:none; }
   #dom{ position:absolute; inset:0; }
 
   /* ---------- 场景骨架：全绝对定位，避免块间互相挤压 ---------- */
@@ -208,6 +210,7 @@
   <canvas id="fx" width="1080" height="1920"></canvas>
   <div id="vignette"></div>
   <div id="dom"></div>
+  <canvas id="beatcv" width="1080" height="1920"></canvas>
   <div id="hud">
     <div class="corner-l">
       <span class="dot"></span>
@@ -307,6 +310,9 @@ const stage = document.getElementById('stage');
 const dom = document.getElementById('dom');
 const cv = document.getElementById('fx');
 const ctx = cv.getContext('2d');
+const bcv = document.getElementById('beatcv');
+const bct = bcv.getContext('2d');
+const BEATS = window.__BEATS__ || null;
 const hudProgress = document.getElementById('progress');
 const hudIndex = document.getElementById('hud-index');
 const CX = W - 96 * 2;
@@ -692,6 +698,104 @@ const FX = {
 };
 
 /* ============================================================
+   ④.5 节拍层 —— 只在 build 注入了 window.__BEATS__ 时启用
+   每个击打点触发一组视觉事件（冲击波 / 边缘闪光 / 画面 punch /
+   左侧拍格 / 拍号），事件时间与 beats.json 的时间戳一一对应。
+   这层的用途是"让卡点可被肉眼验证"：声音每响一下，画面必动一下。
+   ============================================================ */
+const BEAT_N = BEATS && BEATS.onsets ? BEATS.onsets.length : 0;
+const BEAT_PERIOD = (BEATS && BEATS.period) || 0.6;
+
+function beatAt(time) {
+  if (!BEAT_N) return null;
+  const arr = BEATS.onsets;
+  let lo = 0, hi = arr.length - 1, idx = -1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (arr[mid] <= time + 1e-6) { idx = mid; lo = mid + 1; } else hi = mid - 1;
+  }
+  if (idx < 0) return null;
+  const period = idx + 1 < arr.length ? arr[idx + 1] - arr[idx] : BEAT_PERIOD;
+  return { idx, dt: time - arr[idx], period, inBar: idx % 4, total: arr.length };
+}
+
+function drawBeatLayer(b) {
+  bct.clearRect(0, 0, W, H);
+  if (!b) return;
+
+  const { dt, idx, inBar } = b;
+  const decay = Math.exp(-dt / 0.115);
+
+  // ① 边缘闪光：整屏向外扩散的一圈暖光，最直观的"这一下"
+  const edge = Math.max(0, 1 - dt / 0.26);
+  if (edge > 0.001) {
+    const g = bct.createRadialGradient(W / 2, H * 0.46, H * 0.26, W / 2, H * 0.46, H * 0.60);
+    g.addColorStop(0, 'rgba(224,169,78,0)');
+    g.addColorStop(0.72, `rgba(224,169,78,${(edge * 0.10).toFixed(3)})`);
+    g.addColorStop(1, `rgba(224,169,78,${(edge * 0.34).toFixed(3)})`);
+    bct.fillStyle = g;
+    bct.fillRect(0, 0, W, H);
+  }
+
+  // ② 冲击波：两圈错开 55ms，从中心荡开
+  [0, 0.055].forEach((off, i) => {
+    const d = dt - off;
+    if (d < 0) return;
+    const r = 130 + easeOut(Math.min(1, d / 0.42)) * 1180;
+    const a = Math.max(0, 1 - d / 0.46) * (i ? 0.24 : 0.40);
+    bct.beginPath();
+    bct.arc(W / 2, H * 0.46, r, 0, Math.PI * 2);
+    bct.strokeStyle = `rgba(224,169,78,${a.toFixed(3)})`;
+    bct.lineWidth = i ? 1.8 : 3.4;
+    bct.stroke();
+  });
+
+  // ③ 中心光斑
+  if (decay > 0.02) {
+    const gr = bct.createRadialGradient(W / 2, H * 0.46, 0, W / 2, H * 0.46, 430);
+    gr.addColorStop(0, `rgba(224,169,78,${(decay * 0.09).toFixed(3)})`);
+    gr.addColorStop(1, 'rgba(224,169,78,0)');
+    bct.fillStyle = gr;
+    bct.fillRect(0, 0, W, H);
+  }
+
+  // ④ 左侧拍格：每 4 拍一格，已过 / 当前 / 未到三态
+  const groups = Math.max(1, Math.ceil(b.total / 4));
+  const y0 = 300, y1 = 1560;
+  const step = (y1 - y0) / groups;
+  const curG = Math.floor(idx / 4);
+  for (let i = 0; i < groups; i++) {
+    const y = y0 + i * step;
+    const done = i < curG, now = i === curG;
+    const h = now ? step * 0.60 : done ? step * 0.46 : step * 0.30;
+    const yy = y + (step - h) / 2;
+    bct.fillStyle = now
+      ? `rgba(224,169,78,${(0.55 + 0.45 * decay).toFixed(3)})`
+      : done ? 'rgba(224,169,78,.55)' : 'rgba(244,239,230,.13)';
+    if (now) { bct.shadowColor = 'rgba(224,169,78,.85)'; bct.shadowBlur = 22; }
+    bct.fillRect(34, yy, 5, h);
+    bct.shadowBlur = 0;
+  }
+
+  // ⑤ 拍号 1–4 + 圈号：每拍前 0.34s 显形，跟着拍呼吸
+  const k = Math.max(0, 1 - dt / 0.34);
+  if (k > 0.01) {
+    const loopBeats = (BEATS && BEATS.loopBeats) || 16;
+    const loopNo = Math.floor(idx / loopBeats) + 1;
+    bct.save();
+    bct.globalAlpha = k;
+    bct.fillStyle = '#E0A94E';
+    bct.textAlign = 'left';
+    bct.font = '500 44px "Noto Sans SC"';
+    bct.fillText(String(inBar + 1), 30, 258);
+    bct.font = '300 16px "Noto Sans SC"';
+    bct.fillStyle = 'rgba(201,194,178,.92)';
+    bct.fillText('LOOP ' + String(loopNo).padStart(2, '0'), 30, 282);
+    bct.restore();
+  }
+}
+
+/* ============================================================
    ⑤ seek(t)：纯函数，t ∈ [0,1]
    ============================================================ */
 function renderAt(t) {
@@ -732,9 +836,17 @@ function renderAt(t) {
   }
 
   ctx.clearRect(0, 0, W, H);
+  const beat = beatAt(time);
   if (active.fx && FX[active.fx.type]) {
     ctx.save();
     ctx.globalAlpha = vis;
+    // 图形层跟着鼓点轻微顶一下，避免"入场后死住"
+    if (beat) {
+      const k = Math.exp(-beat.dt / 0.10) * 0.022;
+      ctx.translate(W / 2, H * 0.62);
+      ctx.scale(1 + k, 1 + k);
+      ctx.translate(-W / 2, -H * 0.62);
+    }
     FX[active.fx.type](p, active.fx);
     ctx.restore();
   }
@@ -742,6 +854,11 @@ function renderAt(t) {
   hudProgress.style.width = (t * 100) + '%';
   const num = String((STORY.meta.startIndex || 1) + active.i).padStart(2, '0');
   if (hudIndex.textContent !== num) hudIndex.textContent = num;
+
+  // 节拍层 + 画面 punch：每个击打点让整屏轻微顶一下（1.3%，85ms 衰减）
+  drawBeatLayer(beat);
+  punchK = beat ? 1 + 0.013 * Math.exp(-beat.dt / 0.085) : 1;
+  applyScale();
 }
 
 /* ============================================================
@@ -762,9 +879,14 @@ function makeGrain() {
   document.getElementById('grain').style.backgroundImage = `url(${c.toDataURL()})`;
 }
 
+let stageScale = 1;
+let punchK = 1;
+function applyScale() {
+  stage.style.transform = `translate(-50%,-50%) scale(${(stageScale * punchK).toFixed(4)})`;
+}
 function fit() {
-  const s = Math.min(window.innerWidth / W, window.innerHeight / H);
-  stage.style.transform = `translate(-50%,-50%) scale(${s})`;
+  stageScale = Math.min(window.innerWidth / W, window.innerHeight / H);
+  applyScale();
 }
 window.addEventListener('resize', fit);
 

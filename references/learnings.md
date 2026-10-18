@@ -22,6 +22,12 @@
 
 ---
 
+### 2026-10-18 · 卡点总觉得差半拍：beats.json 标 96 BPM，实际 112.98
+- 现象：卡点总觉得差半拍：beats.json 标 96 BPM，实际 112.98
+- 根因：beat.mjs v1 挑能量峰、拿峰间隔中位数当 BPM，MIN_GAP=0.22s 允许 272BPM 双触发；且用 24 秒压缩波形图肉眼判断，把鼓糊成噪声墙后误判'没有鼓'
+- 改动：重写 beat.mjs（自相关给候选 + period×phase 二维精扫 + 网格点吸附 ±25ms + ratio 置信度）；新增 verify-beats.mjs / make-drum-track.mjs；模板加 __BEATS__ 节拍层；build 加 --beats
+- 判据：verify-beats 在合成 96BPM 基准轨上返回 96.00 / 100% 落点；vibe.mp3 返回 112.98，302 个拍点高频起音峰值落在 0ms
+
 ### 2026-10-18 · 新写的 flash-frame 检测对合成闪帧片判「通过」，等于完全失效
 - 现象：新写的 flash-frame 检测对合成闪帧片判「通过」，等于完全失效
 - 根因：两处坑：① signalstats 把近零值写成 8.68e-05，正则 [\d.]+ 截成 8.68 制造假尖峰；② 闪帧的帧差特征是 H,H 或 H,L,H（两处突变夹住残帧），原判据写成「连续 ≥2 帧高」,对 H,L,H 和 H,H,H 全部漏判

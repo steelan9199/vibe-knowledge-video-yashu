@@ -30,6 +30,7 @@ const arg = (k, d) => {
 };
 const STRICT = argv.includes('--strict');
 const NO_BEAT = argv.includes('--no-beat');   // 关闭卡点，用原始时长
+const BEATS_FILE = arg('beats', null);        // 指定击打点表，默认 assets/beats.json
 const STORY_PATH = path.resolve(arg('story', 'story.json'));
 const OUT = path.resolve(arg('out', 'out/story.html'));
 const QUIET = argv.includes('--quiet');
@@ -227,9 +228,13 @@ function snapToOnsets(scenes, beats) {
 }
 
 // ---------------------------------------------------------------- 注入
-function inject(template, story) {
+function inject(template, story, beats) {
   const json = JSON.stringify(story, null, 2).replace(/</g, '\\u003c');
-  const injectScript = `<script>window.__STORY__ = ${json};</script>\n`;
+  // 节拍层数据：只注入片长范围内的击打点，控制体积
+  const beatScript = beats
+    ? `<script>window.__BEATS__ = ${JSON.stringify(beats).replace(/</g, '\\u003c')};</script>\n`
+    : '';
+  const injectScript = beatScript + `<script>window.__STORY__ = ${json};</script>\n`;
 
   // 字体路径改成绝对 file:// —— 保证 html 输出到任意目录都能找到 fonts/
   let html = template.replace(/url\("fonts\/([^"]+)"\)/g, (_m, f) => {
@@ -278,10 +283,12 @@ const template = await readFile(TEMPLATE, 'utf8');
 
 // 卡点：把切屏推到音乐击打上（默认开启，--no-beat 关闭）
 let beatInfo = null;
+let beatData = null;
 if (!NO_BEAT) {
   try {
-    const beats = JSON.parse(await readFile(path.join(ROOT, 'assets', 'beats.json'), 'utf8'));
-    beatInfo = snapToOnsets(story.scenes, beats);
+    const bp = BEATS_FILE ? path.resolve(BEATS_FILE) : path.join(ROOT, 'assets', 'beats.json');
+    beatData = JSON.parse(await readFile(bp, 'utf8'));
+    beatInfo = snapToOnsets(story.scenes, beatData);
     if (beatInfo && !QUIET) {
       console.error(`[build] 卡点：BPM ${beatInfo.bpm} · ${beatInfo.moved}/${story.scenes.length} 处切屏对齐击打 · 最大位移 ${beatInfo.maxShift}s`);
     }
@@ -290,7 +297,22 @@ if (!NO_BEAT) {
   }
 }
 
-const html = inject(template, story);
+// 节拍可视化层：注入片长内的击打点，模板据此每拍画冲击波 / 拍格 / 画面 punch
+let beatsForVisual = null;
+if (beatData && Array.isArray(beatData.onsets) && beatData.onsets.length) {
+  const total = story.scenes.reduce((a, s) => a + (Number(s.dur) || 0), 0);
+  const inRange = (t) => t <= total + 0.05;
+  beatsForVisual = {
+    bpm: beatData.bpm,
+    period: +(beatData.period || 60 / beatData.bpm).toFixed(5),
+    loopBeats: Number(beatData.strongEvery) > 1 ? Math.min(64, Number(beatData.strongEvery)) : 16,
+    onsets: beatData.onsets.filter(inRange),
+    strong: (beatData.strong || []).filter(inRange),
+  };
+  if (!QUIET) console.error(`[build] 节拍层：${beatsForVisual.onsets.length} 个击打点（片长 ${total.toFixed(2)}s）`);
+}
+
+const html = inject(template, story, beatsForVisual);
 await mkdir(path.dirname(OUT), { recursive: true });
 await writeFile(OUT, html, 'utf8');
 
@@ -300,5 +322,6 @@ console.log(JSON.stringify({
   scenes: story.scenes.length,
   duration: +story.scenes.reduce((a, s) => a + (Number(s.dur) || 0), 0).toFixed(2),
   beat: beatInfo,
+  beatVisual: beatsForVisual ? beatsForVisual.onsets.length : 0,
   warnings: warns,
 }, null, 2));

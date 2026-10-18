@@ -1,7 +1,7 @@
 ---
 name: vibe-knowledge-video-yashu
 description: 把一段文案做成抖音「vibe 知识大赏」风格的竖屏知识视频（1080x1920 MP4）。用户给出文案、观点或选题，输出可直接发布的知识短视频。触发词：vibe知识、知识大赏、知识视频、把这段文案做成视频、竖屏知识视频、生成知识短视频、文案转视频。
-version: 1.3.0
+version: 1.4.0
 ---
 
 # Vibe 知识视频生成器
@@ -129,21 +129,74 @@ node scripts/run.mjs --story story.json --sheet out/sheet.png
 配乐不是"加个背景音"，**切屏必须落在鼓点上**，否则再好的文案也显得业余。
 
 ```
-assets/bgm/vibe.mp3   （神曲，160s，够所有片子用）
-        ↓ scripts/beat.mjs        一次性分析，产出 assets/beats.json
-assets/beats.json     { bpm, onsets[413], strong[137] }
+assets/bgm/vibe.mp3   （神曲，160s）
+        ↓ scripts/beat.mjs        周期 × 相位二维拟合
+assets/beats.json     { bpm, period, phase, onsets[302], strong[19], ratio, confidence }
         ↓ scripts/build.mjs       把每个切点推到最近的击打上（±0.5s 内）
-story.json 的 dur    → 实际时长被微调，输出里会打印"6/7 处切屏对齐击打"
+story.json 的 dur    → 实际时长被微调，输出里会打印"n/7 处切屏对齐击打"
+        ↓ scripts/inject          同时把 onsets 注入 window.__BEATS__
         ↓ scripts/render.mjs      -stream_loop -1 铺满全片 + 结尾 1.2s 淡出
 out/final.mp4
 ```
 
-要点：
+**beat.mjs 只做一件事：找拍长和相位，不找"能量峰"。**
 
-- **story.json 里的 `dur` 是目标值，不是最终值**。build 会在 ±0.5s 内把它推到击打点上，仍受 4–9s 约束。
-- 切点优先落在**重拍**（`strong`）上，找不到才退到普通击打；实测 6 个切点全部落在击打 3ms 内。
-- 换歌只要两步：替换 `assets/bgm/` 里的文件 → `node scripts/beat.mjs --audio 新歌.mp3 --out assets/beats.json`。
-- 音乐比片子长时自动从头开始用；比片子短时自动循环（不会再把成片截断）。
+| v1 的错（1.4.0 前） | v2 的做法 |
+|---|---|
+| 挑能量峰，拿峰间隔的中位数当 BPM | 自相关只给候选，period × phase 二维精扫定拍 |
+| 峰不规律 → BPM 是假的 | 输出 `ratio`（网格点 ÷ 半拍强度），<1.25 直接判"无可用节拍" |
+| `MIN_GAP=0.22s` 允许 272BPM 双触发 | 拍长锁在 80–150BPM，网格点吸附 ±25ms 到真实音头 |
+
+实测：vibe.mp3 被 v1 测成 **96 BPM**，实际 **112.98 BPM / period 0.53106s**。差 17%，
+第 20 拍起就错位半个拍子——听感上就是"卡点没卡上"。v2 的 302 个拍点，高频起音峰值
+全部落在拍点 **0ms** 处（10ms 分辨率）。
+
+**每拍都要有视觉事件（`__BEATS__`）**
+
+build 会把击打点注入模板，`#beatcv` 那一层按时间戳画：
+
+- 中央冲击波（两圈，错开 55ms）
+- 全屏边缘暖光闪
+- 整屏 `scale` 顶一下（1.3%，85ms 衰减）
+- 左侧拍格：每 4 拍一格，已过 / 当前 / 未到三态
+- 左上拍号 1–4 + `LOOP NN`（每 `strongEvery` 拍一圈）
+
+**这是让卡点可被肉眼验证的机制**：音乐每响一下，画面必动一下。没有这一层，"卡点准不准"只能靠感觉。
+
+**参数**
+
+| 参数 | 作用 |
+|---|---|
+| `--bgm none` | 不要配乐（纯静音轨） |
+| `--bgm 别的歌.mp3` | 换配乐，**同时要重跑 `beat.mjs`** |
+| `--beats x.json` | 指定击打点表（默认 `assets/beats.json`） |
+| `--no-beat` | 保留配乐但不卡点，也不注入节拍层 |
+| `--draft` | 2fps 试片，30 秒出结果 |
+| `--settle 40` | 每帧截图前等待毫秒数。**调小会闪帧**，机器过载调到 70 |
+
+**换歌两步**
+
+```bash
+cp 新歌.mp3 assets/bgm/
+node scripts/beat.mjs --audio assets/bgm/新歌.mp3 --out assets/beats.json
+```
+
+跑完先看 `ratio` 和 `confidence`。**`confidence: low` 就别硬卡**——这条音频没有可用的节拍，
+换成"每屏落在整秒"或换歌，比假装卡点强。
+
+**配乐没有鼓怎么办**
+
+用 `scripts/verify-beats.mjs` 先体检，它会把三件事量出来：拟合 BPM / 网格对比度 /
+每 20 秒的低频律动强度。如果确认无节拍，用 `scripts/make-drum-track.mjs` 合成一条
+"鼓点真值已知"的基准轨（96BPM four-on-the-floor，鼓点时间精确到采样点），
+用它做卡点基准，而不是猜。
+
+**注意 `assets/bgm/vibe.mp3` 的身份**：它的容器元数据里带 `comment: vid:...`、
+`major_brand: isom`——这是**从抖音视频里抽出来的音轨**，不是音乐平台的原曲。
+它的节拍是真实的（112.98 BPM），但混响极重、段落起伏大，`ratio` 只有 1.42。
+不要因为它"听起来糊"就断定没有鼓：24 秒压成一张波形图，任何鼓都会被糊成噪声墙，
+**必须放大到 2 秒看频谱**。
+
 
 ## 5. qa 不通过时怎么改
 
@@ -186,7 +239,9 @@ qa 的输出是**聚合后**的，同类问题一行，直接照做：
 |---|---|---|
 | `scripts/run.mjs` | 一键流水线，串起 build→qa→render→终检 | 基本不动 |
 | `scripts/build.mjs` | 容量校验 + 卡点 + 把 story 注入模板 | 只改文案时不动 |
-| `scripts/beat.mjs` | 分析配乐，产出击打点时间表 | 只有换歌时才跑 |
+| `scripts/beat.mjs` | 分析配乐，产出击打点表（周期×相位拟合） | 只有换歌时才跑 |
+| `scripts/verify-beats.mjs` | 独立校验节拍表：三频段分离 + 网格拟合 + 鼓组证据 | 怀疑卡点不准 / 换新配乐时先跑它 |
+| `scripts/make-drum-track.mjs` | 合成"鼓点真值已知"的基准音轨（96BPM） | 配乐没有可用节拍时 |
 | `scripts/qa.mjs` | 几何体检 / 联系图 / 黑屏终检 | 判定阈值不合理时才动 |
 | `scripts/render.mjs` | 无头浏览器逐帧截图 + ffmpeg 合成 | 改分辨率/帧率/音轨时 |
 | `scripts/learn.mjs` | 写经验日志（自进化用） | 每次有可复用发现时 |
