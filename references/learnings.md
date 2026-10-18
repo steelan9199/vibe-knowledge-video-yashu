@@ -22,6 +22,12 @@
 
 ---
 
+### 2026-10-18 · 连不上浏览器调试端口 / fetch failed，重试 40 次也救不回来；任务管理器里 msedge 进程一堆，但 headless 0 个
+- 现象：连不上浏览器调试端口 / fetch failed，重试 40 次也救不回来；任务管理器里 msedge 进程一堆，但 headless 0 个
+- 根因：复用 --frames-dir 时上一次的 browser-profile 还在。Edge 看到同名 profile 目录，判定已有实例在跑，新进程直接退出、不监听调试端口，所以重试再多次也没用
+- 改动：render.mjs 启动前 rm -rf 掉 <workDir>/browser-profile 再 mkdir（已内置，1.6.5）
+- 判据：看 [render] Browser: 之后是否马上打出载入 file://，以及 ps 里有没有 headless 进程
+
 ### 2026-10-18 · __ready 为 true、__error 为 null，但整片全黑
 - 现象：__ready 为 true、__error 为 null，但整片全黑
 - 根因：window.seek 包装函数与同名函数声明同名，赋值后包装函数调用自己形成无限递归，爆栈被内层 catch 吞掉，真正的 seek 一次都没执行

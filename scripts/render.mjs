@@ -181,6 +181,9 @@ async function waitForPort(portFile, timeoutMs = 20000) {
   await mkdir(path.dirname(OUT), { recursive: true });
 
   const userDataDir = path.join(workDir, 'browser-profile');
+  // 复用 --frames-dir 时，上一次的 profile 还在。Edge 看到同名 profile 会认为已有实例在跑，
+  // 新进程直接退出、不监听调试端口 → 表现为「连不上端口，fetch failed」，重试也救不回来。
+  await rm(userDataDir, { recursive: true, force: true }).catch(() => {});
   await mkdir(userDataDir, { recursive: true });
 
   // 1) 启动无头 Chrome

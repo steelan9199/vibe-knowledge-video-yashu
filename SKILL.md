@@ -1,7 +1,7 @@
 ---
 name: vibe-knowledge-video-yashu
 description: 把一段文案做成抖音「vibe 知识大赏」风格的竖屏知识视频（1080x1920 MP4）。用户给出文案、观点或选题，输出可直接发布的知识短视频。触发词：vibe知识、知识大赏、知识视频、把这段文案做成视频、竖屏知识视频、生成知识短视频、文案转视频。
-version: 1.6.4
+version: 1.6.5
 ---
 
 # Vibe 知识视频生成器
@@ -123,6 +123,23 @@ node scripts/render.mjs --html out/story.html --out out/final.mp4 --quiet
 ```bash
 node scripts/run.mjs --story story.json --sheet out/sheet.png
 ```
+
+### 静态图：封面 / 头图 / 合集封面
+
+同一条渲染管线就能出静帧，不必先渲视频再抽帧：
+
+```bash
+node scripts/render.mjs --html cover.html --width 1080 --height 1080 \
+  --duration 1 --fps 1 --limit 1 --bgm none --frames-dir ./frames
+cp frames/frames/f_00001.png out/cover.png
+```
+
+四条硬规矩：
+
+1. **视口必须显式给 `--width/--height`**。默认是 1080×1920 竖屏，出方图会被裁边或留黑边。
+2. 静态页同样要写 `window.__duration` / `window.__ready` / `data-boot`，否则 render 卡在「页面未就绪」。
+3. **验收看 240px 缩略图**：封面在信息流里就是这个尺寸，全尺寸好看不算过。
+4. 圆环、放射、同心圆一类装饰，**半径不要超过画幅短边的一半**（1080 方图即 540）。超了会被画布裁成几段碎弧，看起来像渲染出错；如果游标点还挂在被裁的环上，就会在画面边缘留下一颗孤立亮点——比错位更糟，像脏点。
 
 ## 4. 配乐与卡点
 
