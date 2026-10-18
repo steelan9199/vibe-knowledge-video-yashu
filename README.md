@@ -3,8 +3,8 @@
 把一段文案做成抖音「vibe 知识大赏」风格的竖屏知识视频（1080×1920 MP4）。
 零外部依赖：只用 Node 22 + 无头 Edge/Chrome + ffmpeg。
 
-这是 WorkBuddy 技能 `~/.workbuddy/skills/vibe-knowledge-video-yashu/` 的源码仓库。
-仓库是源码，技能目录是运行位置，用 `scripts/install.mjs` 同步。
+本目录同时是 WorkBuddy 技能运行目录和 git 仓库：
+`~/.workbuddy/skills/vibe-knowledge-video-yashu/`。改完即生效，无需部署。
 
 ## 一条命令
 
@@ -27,7 +27,6 @@ scripts/
   qa.mjs                 几何体检 / 联系图 / 黑屏终检
   render.mjs             无头浏览器逐帧截图 + ffmpeg 合成
   learn.mjs              把一条经验写进 references/learnings.md
-  install.mjs            部署到 WorkBuddy 技能目录
 assets/
   template.html          1080×1920 分镜模板（唯一视觉来源）
   beats.json             击打点时间表（由 beat.mjs 生成）
@@ -56,12 +55,13 @@ node scripts/beat.mjs --audio assets/bgm/新歌.mp3 --out assets/beats.json
 
 > 该曲目版权归原作者，本仓库仅供个人本地出片使用，请勿再分发或商用。
 
-## 部署
+## 提交
 
 ```bash
-node scripts/install.mjs          # 同步到 ~/.workbuddy/skills/vibe-knowledge-video-yashu
-node scripts/install.mjs --dry    # 只看会改什么
+node push.js "feat: 改了什么"     # add -A → commit → push → 打 tag
 ```
+
+VS Code 里也可以按 `F5` 选「🚀 Push to GitHub」（配置在 `.vscode/launch.json`）。
 
 ## 自进化
 

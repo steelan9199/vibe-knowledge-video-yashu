@@ -175,7 +175,7 @@ qa 的输出是**聚合后**的，同类问题一行，直接照做：
 
 **文件职责**（改动前先认位置，别改错地方）
 
-目录：`scripts/` 全部可执行脚本 · `assets/` 模板、字体、配乐 · `references/` 文案与视觉规范 · 根目录只有 `SKILL.md` 和 `story.example.json`。
+目录：`scripts/` 全部可执行脚本 · `assets/` 模板、字体、配乐 · `references/` 文案与视觉规范 · 根目录只有 `SKILL.md`、`story.example.json`、`push.js`（一键提交推送）。
 
 | 文件 | 作用 | 什么时候动 |
 |---|---|---|
@@ -185,7 +185,6 @@ qa 的输出是**聚合后**的，同类问题一行，直接照做：
 | `scripts/qa.mjs` | 几何体检 / 联系图 / 黑屏终检 | 判定阈值不合理时才动 |
 | `scripts/render.mjs` | 无头浏览器逐帧截图 + ffmpeg 合成 | 改分辨率/帧率/音轨时 |
 | `scripts/learn.mjs` | 写经验日志（自进化用） | 每次有可复用发现时 |
-| `scripts/install.mjs` | 把仓库同步到技能运行目录 | 改完源码后 |
 | `assets/template.html` | 1080×1920 分镜模板（唯一视觉来源） | 只有换整片风格才动 |
 | `assets/fonts/` | 三份子集化字体 | 不要动 |
 | `assets/bgm/vibe.mp3` | 配乐神曲，默认启用 | 换歌时替换 |
@@ -247,10 +246,12 @@ node scripts/learn.mjs add \
 - 同一个问题**第二次**出现 → 升级：写进 §0 铁律或 `troubleshooting.md` 表格，**然后删掉日志条目**（日志只放还没变成规则的东西）。
 - 日志上限 40 条，`learn.mjs` 自动淘汰最旧的。写满说明该合并成规则了。
 
-### 改完记得部署
+### 第四步：提交
+
+改完即生效（本目录就是技能运行目录，也是 git 仓库）。一条命令提交并推送：
 
 ```bash
-node scripts/install.mjs      # 同步到 ~/.workbuddy/skills/vibe-knowledge-video-yashu
+node push.js "learn: 一句话说明改了什么"
 ```
 
-仓库是源码，技能目录是运行位置；忘记部署 = 下次跑的还是旧版本。
+不传消息则用时间戳。忘记提交 = 改动只活在本地，换机器就丢。
