@@ -12,7 +12,8 @@
  *   ③ 安全区数字：模板 CSS 变量 == design-system.md 图示
  *   ④ 经验日志：格式合规、条数未超限、提到的文件存在
  *   ⑤ story.example.json 可解析且类型合法
- *   ⑥ --regress 额外跑一遍旧样例的 build + qa（回归）
+ *   ⑥ SKILL.md frontmatter 有合法 version（自进化后必须升版）
+ *   ⑦ --regress 额外跑一遍旧样例的 build + qa（回归）
  *
  * 用法：
  *   node scripts/selfcheck.mjs
@@ -116,7 +117,18 @@ try {
   bad('样例', 'story.example.json 不是合法 JSON', String(e.message).slice(0, 80));
 }
 
-// ⑥ 回归 ----------------------------------------------------------
+// ⑥ 版本号 --------------------------------------------------------
+// 自进化协议要求每次改动都升 version 再 push；这里只保证它存在且形态合法，
+// 升没升由人和提交信息负责（机器无法判断"这次算不算一次进化"）。
+const frontmatter = (read('SKILL.md').match(/^---\r?\n([\s\S]*?)\r?\n---/) || [])[1] || '';
+const version = (frontmatter.match(/^version:\s*(\S+)/m) || [])[1];
+if (!version) {
+  bad('版本', 'SKILL.md frontmatter 缺 version 字段', '在 description 下一行加 version: x.y.z');
+} else if (!/^\d+\.\d+\.\d+$/.test(version)) {
+  bad('版本', `version "${version}" 不符合 MAJOR.MINOR.PATCH`, '改成三段数字，如 1.2.3');
+}
+
+// ⑦ 回归 ----------------------------------------------------------
 if (REGRESS) {
   const out = path.join(ROOT, 'out', '_selfcheck.html');
   const b = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'build.mjs'),
@@ -130,7 +142,7 @@ if (REGRESS) {
 }
 
 // 输出 ------------------------------------------------------------
-const scope = `${scripts.length} 脚本 · ${seen.size} 文档引用 · ${entries.length} 条日志${REGRESS ? ' · 含回归' : ''}`;
+const scope = `v${version || '?'} · ${scripts.length} 脚本 · ${seen.size} 文档引用 · ${entries.length} 条日志${REGRESS ? ' · 含回归' : ''}`;
 if (!issues.length) {
   console.log(`[check] 通过（${scope}）`);
   process.exit(0);

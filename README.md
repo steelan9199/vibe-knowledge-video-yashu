@@ -16,6 +16,7 @@ node push.js "feat: 改了什么"                                  # 只推 main
 ## 仓库约定
 
 - 只有 `main` 一条分支 + 版本 tag，不用特性分支；`push.js` 拒绝在非 `main` 分支推送。
+- 版本号在 `SKILL.md` frontmatter 的 `version`（`x.y.z`）。**每次改动先升版再 push**，见 SKILL.md §9。
 - 入库：脚本、模板、字体子集、配乐、击打点、文档。
 - 不入库：`out/`、`*.log`、`demo*.mp4`、`story.json`（个人工作副本）。
 
