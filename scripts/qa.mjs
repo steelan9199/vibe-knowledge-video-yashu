@@ -21,8 +21,9 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-const W = 1080, H = 1920;
-let PAD_X = 96, SAFE_TOP = 172, SAFE_BOTTOM = 360;  // 实际值从模板 CSS 变量读，见下方 syncSpec
+// 画幅不再写死：从 #stage 的实际布局尺寸读（见 MEASURE），下面只是兜底默认值（竖屏）
+let PAD_X = 96, PAD_RIGHT = 96, SAFE_TOP = 172, SAFE_BOTTOM = 360;
+let W = 1080, H = 1920;   // 首次测量后会被页面真实尺寸覆盖
 
 // ---------------------------------------------------------------- args
 const argv = process.argv.slice(2);
@@ -96,20 +97,35 @@ class Cdp {
 
 // ---------------------------------------------------------------- 页面内测量
 const MEASURE = `(() => {
-  const W = ${W}, H = ${H};
   const stage = document.getElementById('stage');
   const sr = stage.getBoundingClientRect();
+  // 画幅取布局尺寸（offsetWidth/Height），不是 getBoundingClientRect——
+  // 后者带 transform 缩放，模板一旦用 transform 适配视口就会算错比例。
+  const W = stage.offsetWidth, H = stage.offsetHeight;
   const s = sr.width / W || 1;
   const loc = (r) => ({
     left: (r.left - sr.left) / s, right: (r.right - sr.left) / s,
     top: (r.top - sr.top) / s, bottom: (r.bottom - sr.top) / s,
     w: r.width / s, h: r.height / s,
   });
-  const SEL = [['.kicker','kicker'],['.title','title'],['.qtext','quote'],['.body','body'],
-               ['.cite','cite'],['.num','num'],['.unit','unit'],['.label','label'],['.qmark','qmark']];
+  // 每个 kind 可以对应多个候选选择器（竖屏一套类名、横屏一套），
+  // **每一条都必须加 .scene.on 前缀**：漏加会让 querySelector 按文档序命中
+  // 前面那些 display:none 屏里的同名元素（尺寸 0），后面所有屏都判成"空"。
+  const SEL = [
+    [['.kicker', '.kick .cn'], 'kicker'],
+    [['.title'], 'title'],
+    [['.qtext', '.quote'], 'quote'],
+    [['.body'], 'body'],
+    [['.cite'], 'cite'],
+    [['.num'], 'num'],
+    [['.unit'], 'unit'],
+    [['.label', '.foot'], 'label'],
+    [['.qmark'], 'qmark'],
+  ];
   const blocks = [];
-  for (const [sel, kind] of SEL) {
-    const el = document.querySelector('.scene.on ' + sel);
+  for (const [sels, kind] of SEL) {
+    const q = sels.map((x) => '.scene.on ' + x).join(', ');
+    const el = document.querySelector(q);
     if (!el) continue;
     const cs = getComputedStyle(el);
     if (cs.visibility === 'hidden' || Number(cs.opacity) < 0.05) continue;
@@ -121,17 +137,34 @@ const MEASURE = `(() => {
       clippedY: el.scrollHeight > el.clientHeight + 2 });
   }
   let fx = null;
-  const cv = document.getElementById('fx');
+  // 图形层：竖屏是 #fx；横屏每屏有自己的 canvas.node，优先测它，否则测到的是全屏环境层
+  const cv = document.querySelector('.scene.on canvas.node') || document.getElementById('fx');
   if (cv) {
-    const d = cv.getContext('2d').getImageData(0, 0, W, H).data;
-    let minX = W, minY = H, maxX = -1, maxY = -1, ink = 0;
-    for (let y = 0; y < H; y += 2) for (let x = 0; x < W; x += 2) {
-      if (d[(y * W + x) * 4 + 3] > 8) { ink++; if (x<minX)minX=x; if(x>maxX)maxX=x; if(y<minY)minY=y; if(y>maxY)maxY=y; }
+    const cw = cv.width, ch = cv.height;
+    const d = cv.getContext('2d').getImageData(0, 0, cw, ch).data;
+    // 两级 bbox：弱墨（alpha>8）只用来判"有没有画东西"；强墨（alpha>40）才用来判几何位置。
+    // 否则一条 4% 不透明度的装饰细线穿过正文，就会被判成"图形压住文字"——横屏满屏都是这种线。
+    let minX = cw, minY = ch, maxX = -1, maxY = -1, ink = 0;
+    let sX = cw, sY = ch, sX2 = -1, sY2 = -1, strong = 0;
+    for (let y = 0; y < ch; y += 2) for (let x = 0; x < cw; x += 2) {
+      const a = d[(y * cw + x) * 4 + 3];
+      if (a > 8) { ink++; if (x<minX)minX=x; if(x>maxX)maxX=x; if(y<minY)minY=y; if(y>maxY)maxY=y; }
+      if (a > 40) { strong++; if (x<sX)sX=x; if(x>sX2)sX2=x; if(y<sY)sY=y; if(y>sY2)sY2=y; }
     }
-    fx = maxX < 0 ? { empty: true } : { empty:false, left:minX, right:maxX, top:minY, bottom:maxY,
-      inkRatio: +(ink / (W*H/4) * 100).toFixed(2) };
+    const useStrong = strong > 200;   // 强墨点太少就退回弱墨，避免噪点当成图形
+    const b = useStrong
+      ? { x0:sX, y0:sY, x1:sX2, y1:sY2 }
+      : { x0:minX, y0:minY, x1:maxX, y1:maxY };
+    const cr = loc(cv.getBoundingClientRect());   // canvas 在舞台里的位置
+    const kx = cr.w / cw, ky = cr.h / ch;         // canvas 像素 -> 舞台 px
+    fx = maxX < 0 ? { empty: true } : { empty:false,
+      left:  +(cr.left + b.x0*kx).toFixed(0), right: +(cr.left + b.x1*kx).toFixed(0),
+      top:   +(cr.top  + b.y0*ky).toFixed(0), bottom:+(cr.top  + b.y1*ky).toFixed(0),
+      inkRatio: +(ink / (cw*ch/4) * 100).toFixed(2),
+      // 铺满整屏的图形是环境层，不参与"压住正文"这类几何判据
+      fullScreen: cr.w >= W*0.9 && cr.h >= H*0.9 };
   }
-  return JSON.stringify({ blocks, fx });
+  return JSON.stringify({ W, H, blocks, fx });
 })()`;
 
 // ---------------------------------------------------------------- 违规判定
@@ -156,6 +189,8 @@ if (VIDEO_ONLY) {
 
 const MIN_PX = { title: 56, quote: 40, body: 34, label: 30, cite: 18, kicker: 20, num: 120, unit: 26 };
 const TEXTY = ['title', 'quote', 'body', 'label'];
+// 「大字号」界限：竖屏 1920 高对应 48px，横屏按比例降到 27px（见 judge 里的用法）
+let BIG_TEXT_PX = 48;
 
 // 小字对比度：手机上 + 视频压缩后，深底暗字会糊成一片。
 // 底色取模板 --bg-mid（#0B0C10），实际有暗角只会更暗，所以这是下限估计。
@@ -179,15 +214,17 @@ function judge(sc, m) {
   for (const blk of m.blocks) {
     const r = blk.rect;
     if (r.left < PAD_X - 2) add('err', 'safe-left', tag, `${blk.kind} 左边缘 ${r.left.toFixed(0)}px < ${PAD_X}`, '减少单行字数');
-    if (r.right > W - PAD_X + 2) add('err', 'safe-right', tag, `${blk.kind} 右边缘超出 ${(r.right - (W - PAD_X)).toFixed(0)}px`, '减少单行字数（右侧是按钮区）');
+    if (r.right > W - PAD_RIGHT + 2) add('err', 'safe-right', tag, `${blk.kind} 右边缘 ${r.right.toFixed(0)}px 超出 ${W - PAD_RIGHT}px`, '减少单行字数（右侧是按钮区）');
     if (r.top < SAFE_TOP - 4 && blk.kind !== 'kicker') add('err', 'safe-top', tag, `${blk.kind} 顶端 ${r.top.toFixed(0)}px 侵入顶部安全区`, '减少行数');
     if (r.bottom > H - SAFE_BOTTOM + 2) add('err', 'safe-bottom', tag, `${blk.kind} 底部 ${r.bottom.toFixed(0)}px 越过 ${H - SAFE_BOTTOM}px 边界（超 ${(r.bottom - (H - SAFE_BOTTOM)).toFixed(0)}px）`, '该屏减 1 行字，或拆到下一屏');
     const min = MIN_PX[blk.kind];
     if (min && blk.fontSize < min - 0.5) add('err', 'font-small', tag, `${blk.kind} 字号 ${blk.fontSize}px < ${min}px`, '减字，不要缩字号硬塞');
-    // 对比度：≥48px 算大字号（4.5:1），小字要求 7:1 —— 抖音压缩 + 手机小屏会再掉一档
+    // 对比度：大字号 4.5:1，小字 9:1 —— 抖音压缩 + 手机小屏会再掉一档。
+    // 「大字号」的界限按画幅高度归一：竖屏 1920 高时是 48px，横屏 1080 高即 27px。
+    // 写死 48 会把横屏 42px 正文（已占画面高度 3.9%）误判成小字。
     const cr = contrastOf(blk.color);
     if (cr) {
-      const need = blk.fontSize >= 48 ? 4.5 : 9;
+      const need = blk.fontSize >= BIG_TEXT_PX ? 4.5 : 9;
       if (cr < need) add('err', 'low-contrast', tag, `${blk.kind} ${blk.fontSize}px 对比仅 ${cr.toFixed(1)}:1（要求 ${need}:1）`, '提亮 --ink-2/--ink-dim，或把这档字重改成 500');
     }
   }
@@ -201,10 +238,23 @@ function judge(sc, m) {
     if (ox > 4 && oy > 4) add('err', 'overlap', tag, `${keys[i]}×${keys[j]} 交叠 ${oy.toFixed(0)}px 高`, '删元素或缩字号（最严重的排版错误）');
   }
 
-  const ambient = sc.fx === 'particles';   // 粒子是全屏环境层，不参与几何约束
+  const ambient = sc.fx === 'particles' || m.fx?.fullScreen;   // 全屏环境层不参与几何约束
   if (m.fx && !m.fx.empty && !ambient) {
     if (m.fx.bottom > H - SAFE_BOTTOM + 6) add('err', 'fx-intrudes', tag, `图形底部 ${m.fx.bottom}px 进入文案区`, '图形上移或降高');
-    if (b.body && m.fx.top < b.body.rect.bottom - 2) add('err', 'fx-overlap-text', tag, `图形顶端 ${m.fx.top}px 压住正文底部 ${b.body.rect.bottom.toFixed(0)}px`, '正文减 1 行');
+    if (b.body) {
+      const R = b.body.rect;
+      // 真二维相交判定：竖屏图形在正文下方、横屏图形在正文右侧，只看纵向会全线误报
+      const oy = Math.min(m.fx.bottom, R.bottom) - Math.max(m.fx.top, R.top);
+      const ox = Math.min(m.fx.right, R.right) - Math.max(m.fx.left, R.left);
+      if (ox > 4 && oy > 4) {
+        // 横屏的图形常以引导线/收敛带穿过正文（设计意图，不遮挡阅读），只报警告；
+        // 竖屏图形在正文下方，一旦相交就是真压字，报错。
+        const wide = W > H;
+        add(wide ? 'warn' : 'err', 'fx-overlap-text', tag,
+          `图形与正文重叠 ${ox.toFixed(0)}×${oy.toFixed(0)}px`,
+          wide ? '横屏允许引导线穿字，目检该帧确认可读性' : '正文减 1 行，或把图形挪开');
+      }
+    }
     if (m.fx.top - (b.body?.rect.bottom ?? 0) < 20 && m.fx.top > (b.body?.rect.bottom ?? 0)) {
       add('warn', 'fx-tight', tag, `图形与正文仅 ${(m.fx.top - b.body.rect.bottom).toFixed(0)}px 间隙`, '加大间距会更透气');
     }
@@ -214,7 +264,9 @@ function judge(sc, m) {
   // 文本密度：整屏可见文字量，过低=空，过高=挤
   const textArea = m.blocks.filter(x => TEXTY.includes(x.kind)).reduce((a, x) => a + x.rect.w * x.rect.h, 0);
   const ratio = textArea / (W * H) * 100;
-  if (ratio > 34) add('warn', 'too-dense', tag, `文字覆盖 ${ratio.toFixed(0)}% 画面`, '拆场景，信息量过大');
+  // 横屏标题铺满 1500px 宽，bbox 面积天然比竖屏大，阈值跟着放宽 6 个百分点
+  const DENSE_MAX = W > H ? 40 : 34;
+  if (ratio > DENSE_MAX) add('warn', 'too-dense', tag, `文字覆盖 ${ratio.toFixed(0)}% 画面（上限 ${DENSE_MAX}%）`, '拆场景，信息量过大');
   // stat 屏的主体是一个 300px+ 的大数字，面积占比天然很低——按文字密度判空是误报
   if (ratio < 2.5 && sc.type !== 'stat') add('warn', 'too-sparse', tag, `文字仅覆盖 ${ratio.toFixed(0)}% 画面`, '画面偏空，可加一句或加大字号');
   return ratio;
@@ -359,9 +411,17 @@ try {
   const spec = JSON.parse(await ev(
     "JSON.stringify((()=>{const cs=getComputedStyle(document.documentElement);" +
     "const n=v=>parseFloat(cs.getPropertyValue(v))||0;" +
-    "return {padX:n('--pad-x'),safeTop:n('--safe-top'),safeBottom:n('--safe-bottom')}})())"
+    "const st=document.getElementById('stage');" +
+    "return {W:st.offsetWidth,H:st.offsetHeight," +
+    "padX:n('--pad-x'),padRight:n('--pad-right')||n('--pad-x')," +
+    "safeTop:n('--safe-top'),safeBottom:n('--safe-bottom')}})())"
   ));
-  if (spec.padX > 0) { PAD_X = spec.padX; SAFE_TOP = spec.safeTop; SAFE_BOTTOM = spec.safeBottom; }
+  if (spec.W > 0 && spec.H > 0) { W = spec.W; H = spec.H; BIG_TEXT_PX = Math.round(48 * H / 1920); }
+  if (spec.padX > 0) { PAD_X = spec.padX; PAD_RIGHT = spec.padRight || spec.padX; SAFE_TOP = spec.safeTop; SAFE_BOTTOM = spec.safeBottom; }
+
+  // 视口对齐真实画幅：启动时按竖屏兜底设过一遍，横屏要重设，否则截图（联系图）会被裁
+  await cdp.send('Emulation.setDeviceMetricsOverride',
+    { width: W, height: H, deviceScaleFactor: 1, mobile: false }, sid);
 
   const missing = JSON.parse(await ev('JSON.stringify(window.__fonts||[])'));
   if (missing.length) add('err', 'font-missing', '-', `字体未加载：${missing.join(', ')}`, '检查 assets/fonts 与 @font-face');

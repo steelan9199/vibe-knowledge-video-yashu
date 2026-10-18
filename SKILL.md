@@ -1,7 +1,7 @@
 ---
 name: vibe-knowledge-video-yashu
 description: 把一段文案做成抖音「vibe 知识大赏」风格的竖屏知识视频（1080x1920 MP4）。用户给出文案、观点或选题，输出可直接发布的知识短视频。触发词：vibe知识、知识大赏、知识视频、把这段文案做成视频、竖屏知识视频、生成知识短视频、文案转视频。
-version: 1.6.5
+version: 1.7.0
 ---
 
 # Vibe 知识视频生成器
@@ -89,12 +89,62 @@ hook → quote → scene → stat → scene → scene → outro
 1      1        2-3             1-2              1
 ```
 
+### 横屏 1920×1080：另一套 story 结构
+
+横屏**不是竖屏拉宽**——模板、字段、校验规则全部不同。要做横屏，从
+[assets/story.example-wide.json](assets/story.example-wide.json) 复制一份（13 屏的完整参考，
+覆盖全部 5 种版式），不要照抄上面竖屏那份。
+
+```json
+{
+  "meta": { "series": "LAW OF LARGE NUMBERS", "handle": "@你的账号" },
+  "scenes": [
+    { "id": "s01", "dur": 4.2514, "layout": "split",
+      "kicker": "大数定律", "kickerEn": "LAW OF LARGE NUMBERS",
+      "title": ["抛十次硬币", "七次<em>正面</em>"],
+      "body": "你觉得自己被命运针对了。\n先别急。",
+      "node": "coin-sequence", "seqN": 10, "cols": 5,
+      "seq": [1,1,0,1,1,0,1,1,1,0] }
+  ]
+}
+```
+
+| 字段 | 约束 |
+|---|---|
+| `dur` | **必须是拍长的整数倍**（默认曲子 8 拍 4.2514s / 16 拍 8.5027s），不是"目标值"——横屏模板内部用 `BEAT_P` 推画面动作，不对齐就会切点和动画错位。build 会吸附并提示 |
+| `layout` | `split` 左文右图 / `center` 居中大标题（图形当背景）/ `data` 上图下文（大数字）/ `vert` 竖排古文 / `formula` 公式屏 |
+| `title` | 数组，最多 2 行，**每行 ≤ 8.6 字**（152px 标题，超了会缩到 112px 以下，气势全失）。`formula` 版式的 title 是 64px 小标签，不受此限 |
+| `body` | 最多 2 行，每行 ≤ 20 字 |
+| `kicker` / `kickerEn` | 中文眉标 + 英文小标，≤ 26 字宽 |
+| `node` | 图形母题，见下表；`none` 表示不画 |
+| `foot` | 可选，右下角脚注 |
+
+可用图形母题（**直接从模板解析，不在校验器里写死**）：
+`coin-sequence` 硬币序列 · `dot-grid` 点阵 · `scatter-trend` 散点趋势 · `band-converge` 收敛带 ·
+`sqrt-curve` √n 曲线 · `counter` 大计数器 · `casino` 轮盘 · `bell-curve` 钟形曲线 ·
+`ancient-quote` 古文竖排 · `formula` 公式 · `concentric` 同心环 · `particles` 全场粒子
+
+其中 `seq`/`seqN`/`cols`、`n`/`big`/`rows` 这类是**各 node 私有参数**，
+照 example 里对应屏的写法改值即可，字段名不能自造。
+
+竖屏与横屏的差异一览：
+
+| | 竖屏（默认） | 横屏 `--aspect wide` |
+|---|---|---|
+| 模板 | `assets/template.html` | `assets/template-wide.html` |
+| 画幅 | 1080×1920 | 1920×1080 |
+| 切点 | build 把 dur 推到最近的鼓点（±0.5s） | dur 自己落在拍网格上 |
+| 单屏 | 4–9s | 4–9.5s（8/16 拍为主） |
+| 总长 | 35–80s（最佳 40–70） | 50–70s（最佳 56–64） |
+| 安全区 | 左/右 96 · 上 172 · 下 360 | 左 120 · 右 180 · 上 96 · 下 140 |
+
 ## 3. 命令
 
 **首选：一条命令跑完**（校验 → 体检 → 渲染 → 终检，任一步失败即停并给出改法）
 
 ```bash
 node scripts/run.mjs --story story.json --out out/final.mp4
+node scripts/run.mjs --story story.json --out out/final.mp4 --aspect wide   # 横屏 1920×1080
 ```
 
 默认就带上技能自带的**神曲**（`assets/bgm/vibe.mp3`）并自动卡点，不需要任何参数。
@@ -102,10 +152,13 @@ node scripts/run.mjs --story story.json --out out/final.mp4
 **分步执行**（只在需要单独定位问题时用）
 
 ```bash
-node scripts/build.mjs  --story story.json --out out/story.html
+node scripts/build.mjs  --story story.json --out out/story.html [--aspect wide]
 node scripts/qa.mjs     --html out/story.html
-node scripts/render.mjs --html out/story.html --out out/final.mp4 --quiet
+node scripts/render.mjs --html out/story.html --out out/final.mp4 --quiet [--aspect wide]
 ```
+
+`--aspect` 必须同时传给 build 和 render：build 用它**选模板**，render 用它**定视口**。
+只传一个会得到「竖屏模板渲进横屏视口」这种半对半错的结果。
 
 常用参数：
 
@@ -129,10 +182,20 @@ node scripts/run.mjs --story story.json --sheet out/sheet.png
 同一条渲染管线就能出静帧，不必先渲视频再抽帧：
 
 ```bash
-node scripts/render.mjs --html cover.html --width 1080 --height 1080 \
+node scripts/render.mjs --html assets/cover-template.html --width 1080 --height 1080 \
   --duration 1 --fps 1 --limit 1 --bgm none --frames-dir ./frames
 cp frames/frames/f_00001.png out/cover.png
 ```
+
+技能自带一套封面物料，改字换期号直接在上面改：
+
+| 文件 | 用途 |
+|---|---|
+| `assets/cover-template.html` | **合集封面模板**（1080×1080 源文件）。改 `已更新 01 / 12 集`、`VOL 01`、`.sub` 那句副标，重渲即可 |
+| `assets/covers/vibe-collection-1080.png` | 已出片的合集封面成品，可直接用 |
+
+封面模板的结构：顶部栏目条 + 期号、VIBE 铜色 148px + 知识大赏 212px、底部
+**12 格集数进度条**（这是"合集"和"单集"封面的分水岭，别删）。
 
 四条硬规矩：
 
@@ -216,9 +279,14 @@ qa 的输出是**聚合后**的，同类问题一行，直接照做：
 | `safe-right` | 越过右侧按钮区 | 减少该行字数 |
 | `overlap` | 两个元素交叠 | 删元素，不要只缩字号 |
 | `font-small` | 字太小（<56px 标题 / <34px 正文） | 减字，不要靠缩字号硬塞 |
-| `low-contrast` | 小字对比度 < 9:1（<48px）或 < 4.5:1（大字） | 提亮 `--ink-2`/`--ink-dim`，或把这档字重改成 500。**不要加描边/阴影**，压缩会变噪点 |
-| `fx-overlap-text` | 图形压住正文 | 正文减 1 行 |
+| `low-contrast` | 小字对比度 < 9:1（大字 4.5:1）。**"大字"界限按画幅高度归一**：竖屏 1920 高→48px，横屏 1080 高→27px | 提亮 `--ink-2`/`--ink-dim`，或把这档字重改成 500。**不要加描边/阴影**，压缩会变噪点 |
+| `fx-overlap-text` | 图形压住正文。竖屏判错、横屏判**警告**——横屏的引导线/收敛带本来就穿字 | 竖屏：正文减 1 行。横屏：目检该帧，能读就过 |
 | `fx-intrudes` | 图形侵入底部 | 该屏去掉 `fx` |
+
+qa 对画幅不敏感：**画幅、安全区、选择器全部从页面自身读**（`#stage` 尺寸 + 模板 CSS 变量
++ `.kicker`/`.kick` 两套类名），换模板不用改 qa。但有一类 bug 它救不了你：**同一个 kind 的
+多个候选选择器，每一条都必须加 `.scene.on` 前缀**——漏加会让 `querySelector` 按文档序命中文档
+里前面那些 `display:none` 屏的同名元素（尺寸 0），后面所有屏都判成"空"，而且不报错。
 | `black-frame` | 有黑屏 | 检查该屏 `dur` 是否 ≥ 4s |
 | `flash-frame` | 成片里 1–2 帧闪出别的画面 | 不动 story：`render.mjs` 每帧已等 `--settle`（默认 40ms）并自动重截体积异常帧；机器过载时把 `--settle 70` 再渲一遍 |
 | 画面全黑 / 元素不出现，但**没有任何报错** | 异常被 catch 吞掉，`__ready` 仍为 true | 见 `troubleshooting.md` §2「静默失败」。渲染前先跑一次 `msedge --headless=new --dump-dom file:///…/story.html \| grep -oE 'data-(boot\|err)="[^"]*"'`，`data-boot` 必须是 `OK` 且带 `idx=<数字>`、`cls=… on` |

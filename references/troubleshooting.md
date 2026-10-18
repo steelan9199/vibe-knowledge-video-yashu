@@ -62,8 +62,26 @@ msedge --headless=new --dump-dom file:///<绝对路径>/story.html | grep -oE 'd
 }, true);</script>
 ```
 
-## 三、三轮不过就降级
+### 2.1 测量脚本里的选择器作用域（qa 专用）
 
+`qa.mjs` 给每个文案块配了多套候选选择器（竖屏 `.kicker`、横屏 `.kick .cn`）。
+写的时候有个不报错的坑：
+
+```js
+// 错：第二段没加前缀
+document.querySelector('.scene.on .title, .title .ln')
+// 对：每一条都必须带 .scene.on
+document.querySelector('.scene.on .title, .scene.on .title .ln')
+```
+
+漏加前缀时，`querySelector` 按**文档序**返回第一个匹配——命中的是前面那些 `display:none`
+屏里的同名元素，宽高都是 0，被 `r.w < 4` 过滤掉。于是**从第二屏起，所有屏都被判成"没有文字"**，
+文字密度全 0%，只剩 `too-sparse` 警告，看起来像模板没渲染。这类 bug 不会抛异常，
+只能靠"密度全 0"这个反常现象反推。
+
+排查入口：`qa --json` 看 `density`，如果 S1 正常、S2 起全 0，先怀疑选择器作用域。
+
+## 三、三轮不过就降级
 `qa` 连续 3 轮仍有错误 → 停止微调，按顺序降级：
 
 1. **删场景**：7 屏砍到 5 屏，把最挤的两屏合并

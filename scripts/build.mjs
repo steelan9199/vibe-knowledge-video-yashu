@@ -7,7 +7,8 @@
  *
  * 用法：
  *   node build.mjs --story story.json --out out/story.html
- *   node build.mjs --story story.json --out out/story.html --strict   # 警告也当错误
+ *   node build.mjs --story story.json --out out/story.html --aspect wide   # 横屏 1920×1080
+ *   node build.mjs --story story.json --out out/story.html --strict        # 警告也当错误
  *
  * 退出码：0 通过（可能有警告）/ 1 有错误
  */
@@ -20,7 +21,6 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
-const TEMPLATE = path.join(ROOT, 'assets', 'template.html');
 const FONT_DIR = path.join(ROOT, 'assets', 'fonts');
 
 // ---------------------------------------------------------------- args
@@ -35,6 +35,16 @@ const BEATS_FILE = arg('beats', null);        // 指定击打点表，默认 ass
 const STORY_PATH = path.resolve(arg('story', 'story.json'));
 const OUT = path.resolve(arg('out', 'out/story.html'));
 const QUIET = argv.includes('--quiet');
+
+/** 画幅：portrait（默认，1080×1920）/ wide（1920×1080）。
+ *  两套模板的 DOM 与 story 字段完全不同，所以校验规则也分两套。 */
+const ASPECT_RAW = String(arg('aspect', 'portrait')).toLowerCase();
+const WIDE = ['wide', '16:9', 'landscape', 'horizontal'].includes(ASPECT_RAW);
+if (!WIDE && !['portrait', '9:16', 'vertical', ''].includes(ASPECT_RAW)) {
+  console.error(`[build] 未知画幅 "${ASPECT_RAW}"，可用：portrait（9:16） / wide（16:9）`);
+  process.exit(1);
+}
+const TEMPLATE = path.join(ROOT, 'assets', WIDE ? 'template-wide.html' : 'template.html');
 
 if (!existsSync(STORY_PATH)) {
   console.error(`[build] 错误：找不到 story.json：${STORY_PATH}`);
@@ -59,6 +69,33 @@ const BUDGET = {
 const DUR = { min: 4, max: 9, totalMin: 35, totalMax: 80 };
 const TYPES = ['hook', 'quote', 'scene', 'stat', 'outro'];
 const FX = ['particles', 'grid', 'curve', 'flow', 'bars'];
+
+// ---------------------------------------------------------------- 横屏预算（1920×1080）
+/**
+ * 横屏不是「竖屏拉宽」：字号、字数、节奏全部另算。
+ *  - 内容宽 = 1920 − 左 120 − 右 180（右侧抖音按钮区）= 1620px，但版心只有 840（左文）+ 图形盒
+ *  - 标题 152px 时单行最多 8.6 个全角字，超过就要缩到 112px 以下，气势全失
+ *  - 正文 42px 单行 20 字：横屏的阅读距离比竖屏近，但视线横扫宽度大，超过 20 字眼睛要「扫」两趟
+ *  - 单屏 4.25s(8 拍) 或 8.5s(16 拍)，比竖屏长——横屏一屏信息量更大，切太快会读不完
+ */
+const WIDE_BUDGET = {
+  titleEm: 8.6,        // 152px 标题单行上限（全角字宽）
+  bodyEm: 20.5,        // 42px 正文单行上限
+  kickerEm: 26,        // 34px 眉标
+  titleLines: 2,
+  bodyLines: 2,
+  emLines: 1,          // <em> 高亮最多 1 处
+  beatsMin: 4,         // 单屏至少 4 拍（2.13s）——再短横屏读不完
+  beatsMax: 18,        // 单屏最多 18 拍（9.57s）
+  totalMin: 50, totalMax: 70,
+};
+
+/** 枚举不在代码里写死，直接从模板解析：模板加了节点/版式，校验器自动跟上 */
+function templateEnums(html) {
+  const nodes = [...html.matchAll(/NODES\['([^']+)'\]\s*=/g)].map(m => m[1]);
+  const layouts = [...new Set([...html.matchAll(/\.L-([a-z][a-z0-9-]*)\s/g)].map(m => m[1]))];
+  return { nodes, layouts };
+}
 
 // ---------------------------------------------------------------- 文本工具
 const stripTags = (s) => String(s ?? '').replace(/<[^>]+>/g, '');
@@ -191,6 +228,94 @@ function validate(story) {
   return null;
 }
 
+// ---------------------------------------------------------------- 横屏校验
+/**
+ * 横屏 story 的字段和竖屏完全不同：
+ *   { id, dur, layout, kicker, kickerEn, title[], body, node, ...node 私有参数 }
+ * 没有 type / fx，所以不能复用竖屏那套 validate()。
+ */
+function validateWide(story, period, enums) {
+  if (!story || typeof story !== 'object') { err('root', 'story 不是对象', '检查 JSON 语法'); return; }
+  const scenes = story.scenes;
+  if (!Array.isArray(scenes) || scenes.length < 3) {
+    err('scenes', '场景数不足 3 个', '一条 50–60s 的横屏片通常 8–14 屏');
+    return;
+  }
+  if (scenes.length > 20) warn('scenes', `场景 ${scenes.length} 个，偏多`, '横屏单屏信息量大，超过 20 屏节奏会散');
+
+  const meta = story.meta || (story.meta = {});
+  meta.series = meta.series ?? '';
+  meta.handle = meta.handle ?? '@你的账号';
+  if (charCount(meta.series) > 26) warn('meta.series', '系列名超过 26 字符，会挤压右侧期号', '缩到 26 以内');
+  if (charCount(meta.handle) > 16) warn('meta.handle', '账号名超过 16 字符，右下角会溢出', '缩到 16 以内');
+
+  let total = 0;
+  scenes.forEach((sc, i) => {
+    const w = `scenes[${i}]${sc.id ? `(${sc.id})` : ''}`;
+
+    // ① 时长必须落在拍网格上：模板内部用 BEAT_P 算冲击/脉冲，dur 一旦不在网格，切点和画面动作会错开
+    const dur = Number(sc.dur);
+    if (!Number.isFinite(dur)) {
+      err(`${w}.dur`, `时长 "${sc.dur}" 不是数字`, '按朗读 5–6 字/秒估，写成拍长整数倍');
+      return;
+    }
+    const k = Math.max(1, Math.round(dur / period));
+    const snapped = +(k * period).toFixed(4);
+    if (Math.abs(snapped - dur) > 0.02) {
+      warn(`${w}.dur`, `${dur}s 不在拍点，已吸到 ${snapped}s（${k} 拍）`,
+        `直接写 ${snapped}，或 ${(8 * period).toFixed(2)}（8 拍）/ ${(16 * period).toFixed(2)}（16 拍）`);
+    }
+    sc.dur = snapped;
+    total += snapped;
+    if (k < WIDE_BUDGET.beatsMin) err(`${w}.dur`, `只有 ${k} 拍（${snapped}s），横屏读不完`,
+      `至少 ${WIDE_BUDGET.beatsMin} 拍 ≈ ${(WIDE_BUDGET.beatsMin * period).toFixed(2)}s`);
+    if (k > WIDE_BUDGET.beatsMax) err(`${w}.dur`, `${k} 拍（${snapped}s）太长`, '超过 9.5s 观众会划走，拆屏');
+    if (k % 4 !== 0) warn(`${w}.dur`, `${k} 拍不是 4 的倍数，切点不落小节`, '对齐到 8 / 12 / 16 拍');
+
+    // ② 版式与图形母题：枚举来自模板本身，不在代码里写死
+    if (!sc.layout) err(`${w}.layout`, '缺 layout 字段', `可选用：${enums.layouts.join(' / ')}`);
+    else if (!enums.layouts.includes(sc.layout)) err(`${w}.layout`, `未知版式 "${sc.layout}"`, `可选用：${enums.layouts.join(' / ')}`);
+    if (sc.node && sc.node !== 'none' && !enums.nodes.includes(sc.node)) {
+      err(`${w}.node`, `未知图形 "${sc.node}"`, `可选用：${enums.nodes.join(' / ')}`);
+    }
+
+    // ③ 标题：formula 屏的 title 是 64px 小标签，不按 152px 主标题算
+    const isFormula = sc.layout === 'formula';
+    const titles = toLines(sc.title);
+    if (!titles.length) err(`${w}.title`, '缺 title', '标题是这一屏的主张');
+    if (titles.length > WIDE_BUDGET.titleLines) err(`${w}.title`, `title 有 ${titles.length} 行，最多 ${WIDE_BUDGET.titleLines} 行`, '拆屏');
+    if (!isFormula) {
+      titles.forEach((ln, j) => {
+        const em = emWidth(ln);
+        if (em > WIDE_BUDGET.titleEm) {
+          err(`${w}.title[${j}]`, `宽 ${em.toFixed(1)} 字 > ${WIDE_BUDGET.titleEm} 字（152px 标题会缩到 112px 以下）`,
+            `删约 ${Math.ceil(em - WIDE_BUDGET.titleEm)} 个字`);
+        }
+      });
+    }
+    const emCount = titles.join('').match(/<em>/g)?.length || 0;
+    if (emCount > WIDE_BUDGET.emLines) err(`${w}.title`, `<em> 高亮 ${emCount} 处，最多 ${WIDE_BUDGET.emLines} 处`, '一屏只强调一个词，多了等于没强调');
+
+    // ④ 正文
+    const bodies = String(sc.body ?? '').split('\n').filter(l => l.trim());
+    if (bodies.length > WIDE_BUDGET.bodyLines) err(`${w}.body`, `body 有 ${bodies.length} 行，最多 ${WIDE_BUDGET.bodyLines} 行`, '拆屏或删句');
+    bodies.forEach((ln, j) => {
+      const em = emWidth(ln);
+      if (em > WIDE_BUDGET.bodyEm) {
+        err(`${w}.body[${j}]`, `宽 ${em.toFixed(1)} 字 > ${WIDE_BUDGET.bodyEm} 字`, `删约 ${Math.ceil(em - WIDE_BUDGET.bodyEm)} 个字`);
+      }
+    });
+
+    // ⑤ 眉标
+    if (sc.kicker && emWidth(sc.kicker) > WIDE_BUDGET.kickerEm) {
+      err(`${w}.kicker`, `宽 ${emWidth(sc.kicker).toFixed(1)} 字 > ${WIDE_BUDGET.kickerEm} 字`, '眉标是标签不是句子');
+    }
+  });
+
+  if (total < WIDE_BUDGET.totalMin) warn('scenes', `总时长 ${total.toFixed(2)}s < ${WIDE_BUDGET.totalMin}s`, '横屏完播友好区间 50–65s');
+  if (total > WIDE_BUDGET.totalMax) err('scenes', `总时长 ${total.toFixed(2)}s > ${WIDE_BUDGET.totalMax}s`, '砍屏幕，不要砍单屏时长');
+}
+
 // ---------------------------------------------------------------- 卡点
 /**
  * 把每个分屏的切换点推到最近的音乐击打上。
@@ -251,6 +376,30 @@ function inject(template, story, beats) {
   return html.replace(anchor, injectScript + anchor);
 }
 
+/**
+ * 横屏模板的注入点和竖屏不同：
+ *  - story 走 <script id="story-data">/*__STORY__*\/</script> 这个占位符
+ *  - 拍长/相位是模板里的常量，构建时用 beats.json 的真实值覆盖，
+ *    换 BGM 后只要重跑 beat.mjs，不用手改模板
+ */
+function injectWide(template, story, period, phase) {
+  const json = JSON.stringify(story, null, 0).replace(/</g, '\\u003c');
+
+  let html = template.replace(/url\("fonts\/([^"]+)"\)/g, (_m, f) => {
+    const abs = path.join(FONT_DIR, f);
+    return `url("${pathToFileURL(abs).href}")`;
+  });
+
+  if (!html.includes('/*__STORY__*/')) throw new Error('横屏模板结构变了：找不到 /*__STORY__*/ 锚点');
+  html = html.replace('/*__STORY__*/', `window.__STORY__ = ${json};`);
+
+  const beatRe = /const BEAT_P = [\d.]+, BEAT_PH = [\d.]+;/;
+  if (!beatRe.test(html)) throw new Error('横屏模板结构变了：找不到 BEAT_P / BEAT_PH 常量');
+  html = html.replace(beatRe, `const BEAT_P = ${period}, BEAT_PH = ${phase};`);
+
+  return html;
+}
+
 // ---------------------------------------------------------------- main
 const raw = await readFile(STORY_PATH, 'utf8');
 let story;
@@ -261,32 +410,7 @@ try {
   process.exit(1);
 }
 
-validate(story);
-
-if (!QUIET) {
-  const scenes = story.scenes || [];
-  const total = scenes.reduce((a, s) => a + (Number(s.dur) || 0), 0);
-  console.error(`[build] 场景 ${scenes.length} 个 · 总时长 ${total}s · 平均 ${(total / Math.max(1, scenes.length)).toFixed(1)}s/屏`);
-  scenes.forEach((s, i) => {
-    const kind = s.type === 'quote' ? 'quote' : s.type === 'stat' ? 'label' : 'title';
-    const lines = toLines(s[kind]);
-    const px = lines.length ? Math.min(...lines.map(l => estMetry(kind, l).px)) : 0;
-    const tag = s.type.padEnd(5);
-    console.error(`  ${String(i + 1).padStart(2)}. ${tag} ${String(s.dur).padStart(4)}s  ${kind} ${String(px).padStart(3)}px`);
-  });
-  warns.forEach(w => console.error(`  [警告] ${w.where}：${w.msg}\n          → ${w.fix}`));
-  errors.forEach(e => console.error(`  [错误] ${e.where}：${e.msg}\n          → ${e.fix}`));
-}
-
-if (errors.length || (STRICT && warns.length)) {
-  console.error(`[build] 未通过：${errors.length} 个错误，${warns.length} 个警告。先改 story.json，不要渲。`);
-  process.exit(1);
-}
-
-const template = await readFile(TEMPLATE, 'utf8');
-
-// 卡点：把切屏推到音乐击打上（默认开启，--no-beat 关闭）
-let beatInfo = null;
+// 卡点表先读：横屏校验要用 period 把 dur 吸到拍网格上，所以不能等校验之后
 let beatData = null;
 if (!NO_BEAT) {
   try {
@@ -303,25 +427,75 @@ if (!NO_BEAT) {
         }
       }
     }
-
-    beatInfo = snapToOnsets(story.scenes, beatData);
-    if (beatInfo && !QUIET) {
-      const { aligned, cuts, moved, maxShift } = beatInfo;
-      console.error(`[build] 卡点：BPM ${beatInfo.bpm} · ${aligned}/${cuts} 个切点落在击打上`
-        + `（${moved} 处微调，最大位移 ${maxShift}s）`);
-      if (aligned < cuts) {
-        console.error(`[build] 警告：有 ${cuts - aligned} 个切点 ±0.5s 内找不到击打，只能硬切。`
-          + `把该屏 dur 调成 4.25 / 2.83 这类 8.5s 的整数分之一`);
-      }
-    }
   } catch (e) {
     if (!QUIET) console.error(`[build] 跳过卡点：${e.message}（跑 scripts/beat.mjs 生成 assets/beats.json）`);
+    beatData = null;
+  }
+}
+const PERIOD = Number(beatData?.period) || 0.53142;
+const PHASE = Number.isFinite(Number(beatData?.phase)) ? Number(beatData.phase) : 0.0702;
+
+const template = await readFile(TEMPLATE, 'utf8');
+
+if (WIDE) validateWide(story, PERIOD, templateEnums(template));
+else validate(story);
+
+if (!QUIET) {
+  const scenes = story.scenes || [];
+  const total = scenes.reduce((a, s) => a + (Number(s.dur) || 0), 0);
+  console.error(`[build] 画幅 ${WIDE ? '横屏 1920×1080' : '竖屏 1080×1920'} · 场景 ${scenes.length} 个`
+    + ` · 总时长 ${total.toFixed(2)}s · 平均 ${(total / Math.max(1, scenes.length)).toFixed(1)}s/屏`);
+
+  if (WIDE) {
+    scenes.forEach((s, i) => {
+      const k = Math.round(Number(s.dur) / PERIOD);
+      const titles = toLines(s.title);
+      const maxEm = titles.length
+        ? Math.max(...titles.map(l => emWidth(l)))
+        : 0;
+      console.error(`  ${String(i + 1).padStart(2)}. ${String(s.id || '').padEnd(4)}`
+        + ` ${String(s.dur).padStart(6)}s ${String(k).padStart(2)}拍`
+        + ` ${String(s.layout || '-').padEnd(8)} ${String(s.node || '-').padEnd(14)}`
+        + ` 标题 ${maxEm.toFixed(1)}字`);
+    });
+  } else {
+    scenes.forEach((s, i) => {
+      const kind = s.type === 'quote' ? 'quote' : s.type === 'stat' ? 'label' : 'title';
+      const lines = toLines(s[kind]);
+      const px = lines.length ? Math.min(...lines.map(l => estMetry(kind, l).px)) : 0;
+      const tag = s.type.padEnd(5);
+      console.error(`  ${String(i + 1).padStart(2)}. ${tag} ${String(s.dur).padStart(4)}s  ${kind} ${String(px).padStart(3)}px`);
+    });
+  }
+  warns.forEach(w => console.error(`  [警告] ${w.where}：${w.msg}\n          → ${w.fix}`));
+  errors.forEach(e => console.error(`  [错误] ${e.where}：${e.msg}\n          → ${e.fix}`));
+}
+
+if (errors.length || (STRICT && warns.length)) {
+  console.error(`[build] 未通过：${errors.length} 个错误，${warns.length} 个警告。先改 story.json，不要渲。`);
+  process.exit(1);
+}
+
+// 卡点：把切屏推到音乐击打上。
+// 横屏不走这一步——它要求 dur 本身就是拍长的整数倍（见 validateWide），
+// 再由模板用 BEAT_P 推算画面内部动作，两套机制混用会互相打架。
+let beatInfo = null;
+if (!WIDE && beatData) {
+  beatInfo = snapToOnsets(story.scenes, beatData);
+  if (beatInfo && !QUIET) {
+    const { aligned, cuts, moved, maxShift } = beatInfo;
+    console.error(`[build] 卡点：BPM ${beatInfo.bpm} · ${aligned}/${cuts} 个切点落在击打上`
+      + `（${moved} 处微调，最大位移 ${maxShift}s）`);
+    if (aligned < cuts) {
+      console.error(`[build] 警告：有 ${cuts - aligned} 个切点 ±0.5s 内找不到击打，只能硬切。`
+        + `把该屏 dur 调成 4.25 / 2.83 这类 8.5s 的整数分之一`);
+    }
   }
 }
 
-// 节拍可视化层：注入片长内的击打点，模板据此每拍画冲击波 / 拍格 / 画面 punch
+// 节拍可视化层：只有竖屏模板消费 __BEATS__；横屏模板自己用 BEAT_P/BEAT_PH 推拍点
 let beatsForVisual = null;
-if (beatData && Array.isArray(beatData.onsets) && beatData.onsets.length) {
+if (!WIDE && beatData && Array.isArray(beatData.onsets) && beatData.onsets.length) {
   const total = story.scenes.reduce((a, s) => a + (Number(s.dur) || 0), 0);
   const inRange = (t) => t <= total + 0.05;
   beatsForVisual = {
@@ -334,13 +508,17 @@ if (beatData && Array.isArray(beatData.onsets) && beatData.onsets.length) {
   if (!QUIET) console.error(`[build] 节拍层：${beatsForVisual.onsets.length} 个击打点（片长 ${total.toFixed(2)}s）`);
 }
 
-const html = inject(template, story, beatsForVisual);
+const html = WIDE
+  ? injectWide(template, story, PERIOD, PHASE)
+  : inject(template, story, beatsForVisual);
 await mkdir(path.dirname(OUT), { recursive: true });
 await writeFile(OUT, html, 'utf8');
 
 console.log(JSON.stringify({
   ok: true,
   html: OUT,
+  aspect: WIDE ? 'wide' : 'portrait',
+  resolution: WIDE ? '1920x1080' : '1080x1920',
   scenes: story.scenes.length,
   duration: +story.scenes.reduce((a, s) => a + (Number(s.dur) || 0), 0).toFixed(2),
   beat: beatInfo,

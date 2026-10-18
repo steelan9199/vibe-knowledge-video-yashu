@@ -22,6 +22,18 @@
 
 ---
 
+### 2026-10-18 · 横屏 center/data/formula 版式正文第二行压到抖音底部进度条
+- 现象：横屏 center/data/formula 版式正文第二行压到抖音底部进度条
+- 根因：按一行正文的高度算 top，两行时多出整整 78px；center/data 原 top:800 两行底边 956>940，formula 原 top:870 底边 1006，超 68px
+- 改动：按 top + 行数×字号×1.62 ≤ 1080−140 反算，center/data 改 776、formula 改 800
+- 判据：qa 的 safe-bottom 会点名具体屏与超出像素
+
+### 2026-10-18 · qa 报告第 2 屏起文字密度全是 0%，只有 too-sparse 警告，但画面明明有字
+- 现象：qa 报告第 2 屏起文字密度全是 0%，只有 too-sparse 警告，但画面明明有字
+- 根因：测量脚本里同一 kind 的多个候选选择器只给第一条加了 .scene.on 前缀，querySelector 按文档序命中了前面 display:none 屏的同名元素（宽高 0），被 r.w<4 过滤掉
+- 改动：每条候选选择器都拼 .scene.on 前缀（qa.mjs MEASURE 已改），排查时用 qa --json 看 density 是否 S1 正常、S2 起全 0
+- 判据：density 数组不应出现"首屏有值、其余全 0"的断层
+
 ### 2026-10-18 · 连不上浏览器调试端口 / fetch failed，重试 40 次也救不回来；任务管理器里 msedge 进程一堆，但 headless 0 个
 - 现象：连不上浏览器调试端口 / fetch failed，重试 40 次也救不回来；任务管理器里 msedge 进程一堆，但 headless 0 个
 - 根因：复用 --frames-dir 时上一次的 browser-profile 还在。Edge 看到同名 profile 目录，判定已有实例在跑，新进程直接退出、不监听调试端口，所以重试再多次也没用

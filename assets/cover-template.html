@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>VIBE 知识大赏 · 合集封面 1080×1080</title>
+<style>
+:root{
+  --bg:#07080A;
+  --ink:#F4F0E8;
+  --ink-2:#8A8376;
+  --ink-dim:#4A463E;
+  --brass:#E3A44E;
+  --glaze:#7FA8B8;
+  --CN:'Noto Sans SC','Microsoft YaHei',sans-serif;
+  --NUM:'Bahnschrift','Consolas',sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{width:100%;height:100%;background:#000;overflow:hidden;
+  -webkit-font-smoothing:antialiased;}
+#stage{position:relative;width:1080px;height:1080px;background:var(--bg);overflow:hidden;}
+#fx{position:absolute;inset:0;}
+#vig{position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(ellipse 88% 82% at 50% 44%,transparent 34%,rgba(0,0,0,.62) 100%);}
+#grain{position:absolute;inset:0;opacity:.035;pointer-events:none;}
+
+/* ---------- 顶部标识 ---------- */
+.rail{position:absolute;left:96px;top:96px;display:flex;align-items:center;gap:18px;}
+.rail .bar{width:56px;height:2px;background:var(--brass);opacity:.9;}
+.rail .t{font-family:var(--NUM);font-size:22px;font-weight:500;color:var(--brass);
+  letter-spacing:.30em;text-transform:uppercase;}
+
+.vol{position:absolute;right:96px;top:98px;text-align:right;}
+.vol .n{font-family:var(--NUM);font-size:54px;font-weight:600;color:var(--ink);
+  letter-spacing:.02em;line-height:1;font-variant-numeric:tabular-nums;}
+.vol .k{font-family:var(--NUM);font-size:18px;font-weight:400;color:var(--ink-2);
+  letter-spacing:.26em;margin-top:9px;opacity:.75;}
+
+/* ---------- 主标题 ---------- */
+.brand{position:absolute;left:96px;top:200px;font-family:var(--NUM);
+  font-size:148px;font-weight:700;color:var(--brass);letter-spacing:.055em;
+  line-height:.92;}
+.title{position:absolute;left:92px;top:334px;font-family:var(--CN);
+  font-size:212px;font-weight:700;color:var(--ink);letter-spacing:.015em;
+  line-height:1.06;white-space:nowrap;}
+.rule{position:absolute;left:96px;top:604px;width:246px;height:2px;
+  background:linear-gradient(90deg,rgba(227,164,78,.95),rgba(227,164,78,0));}
+.sub{position:absolute;left:96px;top:652px;font-family:var(--CN);
+  font-size:44px;font-weight:400;color:#A39A8A;letter-spacing:.10em;
+  line-height:1.7;white-space:nowrap;}
+
+/* ---------- 底部：集数进度条（合集的标志）---------- */
+.prog{position:absolute;left:96px;right:96px;bottom:150px;}
+.prog .meta{display:flex;align-items:baseline;justify-content:space-between;
+  margin-bottom:22px;}
+.prog .meta .l{font-family:var(--CN);font-size:25px;color:#A39A8A;
+  letter-spacing:.14em;}
+.prog .meta .l b{color:var(--brass);font-weight:600;font-variant-numeric:tabular-nums;}
+.prog .meta .r{font-family:var(--NUM);font-size:19px;color:var(--ink-dim);
+  letter-spacing:.26em;text-transform:uppercase;}
+.bars{display:flex;gap:12px;}
+.bars i{flex:1;height:6px;background:rgba(244,240,232,.11);position:relative;}
+.bars i::after{content:'';position:absolute;inset:0;background:transparent;}
+.bars i.on{background:var(--brass);}
+.bars i.on::after{background:rgba(227,164,78,.32);filter:blur(6px);}
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="fx" width="2160" height="2160"></canvas>
+  <div id="vig"></div>
+  <div id="grain"></div>
+
+  <div class="rail"><span class="bar"></span><span class="t">Knowledge Awards</span></div>
+  <div class="vol"><div class="n">01</div><div class="k">VOL</div></div>
+
+  <div class="brand">VIBE</div>
+  <div class="title">知识大赏</div>
+  <div class="rule"></div>
+  <div class="sub">一集，讲透一个概念</div>
+
+  <div class="prog">
+    <div class="meta">
+      <div class="l">已更新 <b>01</b> / 12 集</div>
+      <div class="r">Ongoing</div>
+    </div>
+    <div class="bars" id="bars"></div>
+  </div>
+</div>
+
+<script>
+const S = 1080;
+const c = document.getElementById('fx');
+const x = c.getContext('2d');
+x.setTransform(2, 0, 0, 2, 0, 0);   // 2x 超采样
+
+const BR = '227,164,78', PA = '244,240,232', GZ = '127,168,184';
+
+/* 集数进度条：12 格，第 1 格已出 */
+(function(){
+  const box = document.getElementById('bars');
+  let h = '';
+  for (let i = 0; i < 12; i++) h += `<i class="${i < 1 ? 'on' : ''}"></i>`;
+  box.innerHTML = h;
+})();
+
+/* 颗粒 */
+(function(){
+  const t = document.createElement('canvas'); t.width = t.height = 220;
+  const g = t.getContext('2d');
+  const d = g.createImageData(220, 220);
+  for (let i = 0; i < d.data.length; i += 4){
+    const v = Math.random() * 255;
+    d.data[i] = d.data[i+1] = d.data[i+2] = v; d.data[i+3] = 255;
+  }
+  g.putImageData(d, 0, 0);
+  const el = document.getElementById('grain');
+  el.style.backgroundImage = `url(${t.toDataURL()})`;
+  el.style.backgroundRepeat = 'repeat';
+})();
+
+function draw(){
+  x.clearRect(0, 0, S, S);
+  const cx = 540, cy = 540;
+
+  /* 中心辉光：让标题有"从暗处浮出来"的托底 */
+  const g = x.createRadialGradient(cx, cy, 0, cx, cy, 660);
+  g.addColorStop(0, 'rgba(227,164,78,0.088)');
+  g.addColorStop(0.42, 'rgba(227,164,78,0.024)');
+  g.addColorStop(1, 'rgba(227,164,78,0)');
+  x.fillStyle = g; x.fillRect(0, 0, S, S);
+
+  /* 放射细线：多个知识点从一个核向外散开 */
+  for (let i = 0; i < 24; i++){
+    const a = (i / 24) * Math.PI * 2 - Math.PI / 2;
+    const r1 = 250, r2 = i % 3 === 0 ? 600 : 480;
+    x.beginPath();
+    x.moveTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1);
+    x.lineTo(cx + Math.cos(a) * r2, cy + Math.sin(a) * r2);
+    x.strokeStyle = `rgba(${PA},${i % 3 === 0 ? 0.048 : 0.024})`;
+    x.lineWidth = 1;
+    x.stroke();
+  }
+
+  /* 同心环：半径收在画幅内，避免被画布裁成碎弧
+     最后两环故意略微出框，暗示系统比画面更大 */
+  const radii = [168, 268, 368, 468, 578, 688];
+  const ops   = [0.190, 0.145, 0.108, 0.078, 0.052, 0.034];
+  radii.forEach((r, i) => {
+    x.beginPath(); x.arc(cx, cy, r, 0, 6.2832);
+    x.strokeStyle = `rgba(${PA},${ops[i]})`;
+    x.lineWidth = i === 0 ? 1.4 : 1;
+    x.stroke();
+  });
+
+  /* 游标只挂在完全在框内的两环上，且落在右下留白区，
+     避免出现"边缘孤点"这种看起来像脏点的东西 */
+  const cursors = [[268, Math.PI * 62 / 180, 2.6, 0.50],
+                   [368, Math.PI * 45 / 180, 2.2, 0.34]];
+  for (const [r, ang, rad, al] of cursors){
+    const px = cx + Math.cos(ang) * r, py = cy + Math.sin(ang) * r;
+    x.beginPath(); x.arc(px, py, rad, 0, 6.2832);
+    x.fillStyle = `rgba(${BR},${al})`; x.fill();
+  }
+
+  /* 收敛带：两条向中心收拢的冷釉蓝线，全片"经验→真理"的符号 */
+  for (const sign of [-1, 1]){
+    x.beginPath();
+    for (let px = 40; px <= 1040; px += 3){
+      const t = (px - 40) / 1000;
+      const half = 300 * Math.exp(-Math.pow((t - 0.5) * 4.4, 2)) + 26;
+      const py = cy + sign * half;
+      px === 40 ? x.moveTo(px, py) : x.lineTo(px, py);
+    }
+    x.strokeStyle = `rgba(${GZ},0.18)`;
+    x.lineWidth = 1.4;
+    x.stroke();
+  }
+
+  /* 中心核 */
+  x.beginPath(); x.arc(cx, cy, 6, 0, 6.2832);
+  x.fillStyle = `rgba(${BR},1)`; x.fill();
+  x.beginPath(); x.arc(cx, cy, 15, 0, 6.2832);
+  x.strokeStyle = `rgba(${BR},0.35)`; x.lineWidth = 1; x.stroke();
+
+  /* 微尘 */
+  let seed = 4471;
+  const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  for (let i = 0; i < 70; i++){
+    const px = rnd() * S, py = rnd() * S, r = 0.7 + rnd() * 1.5;
+    x.beginPath(); x.arc(px, py, r, 0, 6.2832);
+    x.fillStyle = `rgba(${PA},${0.04 + rnd() * 0.10})`;
+    x.fill();
+  }
+}
+
+/* 渲染契约：静态封面，seek 忽略时间参数 */
+window.__duration = 1;
+window.seek = function(){ draw(); };
+draw();
+window.__ready = true;
+document.documentElement.setAttribute('data-boot', 'OK | cover 1080x1080');
+</script>
+</body>
+</html>

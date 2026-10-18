@@ -8,6 +8,7 @@
  * 用法：
  *   node render.mjs --html ./story.html --out ./out/video.mp4
  *   node render.mjs --html story.html --duration 60 --fps 30 --bgm ./bgm.mp3
+ *   node render.mjs --html story.html --aspect wide        # 横屏 1920×1080
  *   node render.mjs --html story.html --limit 60      # 只渲前 60 帧，快速验片
  *
  * 退出码：0 成功 / 1 失败
@@ -39,8 +40,11 @@ const HTML = args.html;
 if (!HTML) fail('缺少 --html 参数');
 
 const FPS = Number(args.fps || 30);
-const WIDTH = Number(args.width || 1080);
-const HEIGHT = Number(args.height || 1920);
+// --aspect 是 --width/--height 的快捷写法，两者同时给时以显式宽高为准
+const WIDE_ASPECT = ['wide', '16:9', 'landscape', 'horizontal'].includes(
+  String(args.aspect || '').toLowerCase());
+const WIDTH = Number(args.width || (WIDE_ASPECT ? 1920 : 1080));
+const HEIGHT = Number(args.height || (WIDE_ASPECT ? 1080 : 1920));
 const OUT = path.resolve(args.out || './out/video.mp4');
 const FORMAT = String(args.format || 'png').toLowerCase(); // png | jpeg
 const LIMIT = args.limit ? Number(args.limit) : Infinity;

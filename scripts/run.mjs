@@ -10,6 +10,7 @@
  *   node run.mjs --story story.json --out out/final.mp4 --bgm bgm.mp3
  *   node run.mjs --story story.json --out out/final.mp4 --draft   # 1fps 快速试片
  *   node run.mjs --story story.json --sheet out/sheet.png          # 附带联系图
+ *   node run.mjs --story story.json --aspect wide                  # 横屏 1920×1080
  *
  * 任一步失败即停，并保留那一步的原始输出（那才是可执行的信息）。
  * 退出码：0 成功 / 非 0 失败
@@ -40,6 +41,9 @@ const BGM_OFF = ['none', 'off', 'false'].includes(BGM_RAW);
 const BGM = BGM_RAW && !BGM_OFF ? path.resolve(BGM_RAW) : null; // 不传则用 assets/bgm 自带神曲
 const DRAFT = has('draft');
 const CRF = arg('crf');
+// 画幅：portrait（默认 1080×1920）/ wide（1920×1080）。build 选模板，render 定视口，必须一起传
+const ASPECT = arg('aspect');
+const ASPECT_ARGS = ASPECT ? ['--aspect', ASPECT] : [];
 
 if (!existsSync(STORY)) {
   console.error(`[run] 找不到 ${STORY}`);
@@ -60,13 +64,13 @@ function step(label, file, args) {
 }
 
 // ① 容量校验 + 注入
-step('① 校验与注入', 'build.mjs', ['--story', STORY, '--out', HTML, ...(has('no-beat') ? ['--no-beat'] : [])]);
+step('① 校验与注入', 'build.mjs', ['--story', STORY, '--out', HTML, ...(has('no-beat') ? ['--no-beat'] : []), ...ASPECT_ARGS]);
 
 // ② 排版体检（负数/零错才继续）
 step('② 排版体检', 'qa.mjs', ['--html', HTML, ...(SHEET ? ['--sheet', SHEET] : [])]);
 
 // ③ 渲染
-const rArgs = ['--html', HTML, '--out', OUT, '--quiet'];
+const rArgs = ['--html', HTML, '--out', OUT, '--quiet', ...ASPECT_ARGS];
 if (BGM) rArgs.push('--bgm', BGM);
 else if (BGM_OFF) rArgs.push('--bgm', 'none');
 if (CRF) rArgs.push('--crf', CRF);

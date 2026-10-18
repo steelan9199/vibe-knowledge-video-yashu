@@ -1,0 +1,102 @@
+{
+  "meta": {
+    "series": "LAW OF LARGE NUMBERS",
+    "handle": "@Musk"
+  },
+  "scenes": [
+    {
+      "id": "s01", "dur": 4.2514, "layout": "split",
+      "kicker": "大数定律", "kickerEn": "LAW OF LARGE NUMBERS",
+      "title": ["抛十次硬币", "七次<em>正面</em>"],
+      "body": "你觉得自己被命运针对了。\n先别急。",
+      "node": "coin-sequence", "seqN": 10, "cols": 5,
+      "seq": [1, 1, 0, 1, 1, 0, 1, 1, 1, 0]
+    },
+    {
+      "id": "s02", "dur": 4.2514, "layout": "center",
+      "kicker": "未必", "kickerEn": "NOT NECESSARILY",
+      "title": ["不是硬币坏了", "是你抛得太少"],
+      "body": "十次里的一次偏差，\n不叫命运，叫样本小。",
+      "node": "particles", "n": 30
+    },
+    {
+      "id": "s03", "dur": 4.2514, "layout": "split",
+      "kicker": "观察", "kickerEn": "WHAT YOU SEE",
+      "title": ["十次像锯齿", "一千次收窄成带"],
+      "body": "波动不是消失了。\n是被平掉了。",
+      "node": "band-converge"
+    },
+    {
+      "id": "s04", "dur": 4.2514, "layout": "center",
+      "kicker": "名字", "kickerEn": "THE NAME",
+      "title": ["这个现象", "叫<em>大数定律</em>"],
+      "body": "只是把话说明白：\n重复够多，随机自己会平。",
+      "node": "concentric"
+    },
+    {
+      "id": "s05", "dur": 8.5027, "layout": "data",
+      "kicker": "收敛", "kickerEn": "CONVERGENCE",
+      "title": ["一千次之后", "正面占 <em>48%—52%</em>"],
+      "body": "剩下 20 个点的抖动，\n每一格都是运气。",
+      "node": "counter",
+      "big": { "from": 70, "to": 50.2, "decimals": 1, "unit": "%" }
+    },
+    {
+      "id": "s06", "dur": 4.2514, "layout": "data",
+      "kicker": "一万次", "kickerEn": "TEN THOUSAND",
+      "title": ["一万次之后", "只剩<em>半个点</em>"],
+      "body": "49.5% 到 50.5%。\n缩小不再是感觉，是个数。",
+      "node": "bell-curve",
+      "big": { "from": 52.0, "to": 50.0, "decimals": 1, "unit": "%" }
+    },
+    {
+      "id": "s07", "dur": 4.2514, "layout": "split",
+      "kicker": "速度", "kickerEn": "HOW FAST",
+      "title": ["样本多一百倍", "误差缩<em>十倍</em>"],
+      "body": "这不是巧合。\n是 1 除以根号 n。",
+      "node": "sqrt-curve"
+    },
+    {
+      "id": "s08", "dur": 4.2514, "layout": "split",
+      "kicker": "赌场", "kickerEn": "HOW CASINOS USE IT",
+      "title": ["每一局只赢", "<em>1%—2%</em>"],
+      "body": "单局看，这点优势等于没有。\n赌场从不看单局。",
+      "node": "casino"
+    },
+    {
+      "id": "s09", "dur": 4.2514, "layout": "center",
+      "kicker": "真相", "kickerEn": "THE ACTUAL EDGE",
+      "title": ["他不赌一把", "他赌<em>一万把</em>"],
+      "body": "你带着一次运气进去，\n他带着大数定律进去。",
+      "node": "dot-grid", "cols": 10, "rows": 10
+    },
+    {
+      "id": "s10", "dur": 4.2514, "layout": "split",
+      "kicker": "保险", "kickerEn": "HOW INSURANCE USES IT",
+      "title": ["一个人算不准", "一百万人算得准"],
+      "body": "它不预测谁会出事。\n它只把人数堆到够大。",
+      "node": "scatter-trend", "n": 140
+    },
+    {
+      "id": "s11", "dur": 4.2514, "layout": "vert",
+      "kicker": "古人早说过", "kickerEn": "SAID LONG AGO",
+      "title": ["不积跬步", "无以至千里"],
+      "body": "荀子说的不是鸡汤，\n是样本量。",
+      "node": "ancient-quote"
+    },
+    {
+      "id": "s12", "dur": 4.2514, "layout": "formula",
+      "kicker": "写下来", "kickerEn": "WRITTEN DOWN",
+      "title": ["伯努利 1713 年给出的写法"],
+      "body": "把 \u201c猜不准\u201d 变成 \u201c算得准\u201d。\n前提只有一个：次数够多。",
+      "node": "formula"
+    },
+    {
+      "id": "s13", "dur": 4.2514, "layout": "center",
+      "kicker": "所以", "kickerEn": "SO",
+      "title": ["别用十次下结论", "用<em>一百次</em>"],
+      "body": "下一次想放弃时，\n先再试九十九次。",
+      "node": "particles", "n": 46
+    }
+  ]
+}

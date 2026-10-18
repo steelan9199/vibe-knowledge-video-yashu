@@ -1,0 +1,888 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<script>window.addEventListener('error', function(e){
+  document.documentElement.setAttribute('data-err',
+    (e.message||'?') + ' | line ' + e.lineno + ':' + e.colno);
+}, true);</script>
+<title>VIBE 知识大赏 · 横屏模板 1920×1080</title>
+<style>
+/* 中文字体走技能自带文件，保证换台机器字形不变（hei300/hei500 就是 Noto Sans SC）。
+   构建时 build.mjs 会把下面的相对路径改写成绝对 file://。 */
+@font-face{
+  font-family:"Noto Sans SC";
+  src:url("fonts/hei300.otf") format("opentype");
+  font-weight:300; font-style:normal; font-display:block;
+}
+@font-face{
+  font-family:"Noto Sans SC";
+  src:url("fonts/hei500.otf") format("opentype");
+  font-weight:500; font-style:normal; font-display:block;
+}
+/* ================= 设计令牌（art-director v2） ================= */
+:root{
+  --bg:#07080A;          /* 抬 3-5 LSB，给 1px 线留抗锯齿落边 */
+  --void:#000000;        /* 图形井 / 负形 */
+  --ink:#F4F0E8;         /* 暖白，5200K，防 halation */
+  --ink-2:#8A8376;       /* 次级，5.3:1 */
+  --ink-dim:#4A463E;     /* 只做结构线，不承载信息 */
+  --brass:#E3A44E;       /* 黄铜金：经验 / 已累积 */
+  --red:#D44A2A;         /* 朱砂红：谬误 */
+  --glaze:#7FA8B8;       /* 冷釉蓝：理论 / 极限（唯一冷色，只做线） */
+  --hair:rgba(244,240,232,.20);
+  --grid:rgba(244,240,232,.08);
+  --brass-soft:rgba(227,164,78,.14);
+  --red-soft:rgba(212,74,42,.16);
+
+  --W:1920px; --H:1080px;
+  /* 安全区变量沿用 qa.mjs 的契约名：qa 会读 --pad-x / --pad-right / --safe-top / --safe-bottom，
+     换模板时不用改 qa。横屏比竖屏多一个 --pad-right：右侧是抖音按钮区。 */
+  --pad-x:120px; --pad-right:180px; --safe-top:96px; --safe-bottom:140px;
+  --font-cn:'Noto Sans SC','Microsoft YaHei',sans-serif;
+  --font-num:'Bahnschrift','Consolas',sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{width:100%;height:100%;background:#000;overflow:hidden;
+  -webkit-font-smoothing:antialiased;text-rendering:geometricPrecision;}
+#stage{position:relative;width:var(--W);height:var(--H);background:var(--bg);
+  overflow:hidden;transform-origin:50% 50%;will-change:transform;}
+
+#noise,#vignette{position:absolute;inset:0;pointer-events:none;}
+#vignette{z-index:6;
+  background:radial-gradient(ellipse 92% 86% at 52% 50%,transparent 44%,rgba(0,0,0,.42) 100%);}
+#noise{z-index:7;opacity:.035;}
+#fx{position:absolute;inset:0;z-index:2;}
+#scenes{position:absolute;inset:0;z-index:3;}
+
+/* ================= 场景 ================= */
+.scene{position:absolute;inset:0;display:none;}
+.scene.on{display:block;}
+
+/* -- kicker -- */
+.kick{position:absolute;left:var(--pad-x);top:96px;display:flex;align-items:center;gap:20px;z-index:4;}
+.kick .bar{width:52px;height:1.5px;background:var(--brass);opacity:.85;
+  transform-origin:left center;flex:none;}
+.kick .cn{font-family:var(--font-cn);font-size:34px;font-weight:500;color:var(--brass);
+  letter-spacing:.12em;line-height:1.3;}
+.kick .en{font-family:var(--font-num);font-size:22px;font-weight:500;color:var(--ink-2);
+  letter-spacing:.24em;text-transform:uppercase;line-height:1.3;}
+
+/* -- 标题 -- */
+.title{position:absolute;left:var(--pad-x);z-index:4;
+  font-family:var(--font-cn);font-size:152px;line-height:1.18;font-weight:700;
+  color:var(--ink);letter-spacing:.01em;}
+.title .ln{display:block;overflow:hidden;padding-bottom:.04em;}
+.title .ln>b{display:block;font-weight:700;will-change:transform,opacity;white-space:nowrap;}
+.title em{font-style:normal;color:var(--brass);}
+
+/* -- 正文 -- */
+.body{position:absolute;left:var(--pad-x);z-index:4;
+  font-family:var(--font-cn);font-size:42px;line-height:1.62;font-weight:400;
+  color:var(--ink-2);letter-spacing:.02em;max-width:840px;}
+.body .ln{display:block;overflow:hidden;padding-bottom:.02em;}
+.body .ln>b{display:block;font-weight:400;will-change:transform,opacity;white-space:nowrap;}
+
+/* -- 图形画布 -- */
+.node{position:absolute;z-index:1;}
+
+/* -- 页脚 -- */
+.foot{position:absolute;left:var(--pad-x);top:890px;z-index:4;
+  font-family:var(--font-num);font-size:22px;font-weight:500;color:var(--ink-2);
+  letter-spacing:.20em;text-transform:uppercase;line-height:1.2;}
+.foot .sep{opacity:.45;margin:0 14px;}
+.idx{position:absolute;right:var(--pad-right);top:890px;z-index:4;
+  font-family:var(--font-num);font-size:22px;font-weight:500;color:var(--ink-2);
+  letter-spacing:.20em;line-height:1.2;font-variant-numeric:tabular-nums;}
+
+/* ================= 版式 ================= */
+/* L-split：左文 840 + 右图 740，中心线共享 */
+.L-split .title{top:50%;transform:translateY(-50%);margin-top:-56px;max-width:900px;}
+.L-split .body{top:736px;max-width:840px;}
+.L-split .node{left:1000px;top:190px;}
+
+/* L-center：居中大标题卡，图形作背景 */
+.L-center .kick{left:50%;transform:translateX(-50%);}
+.L-center .title{left:50%;transform:translateX(-50%);width:1400px;text-align:center;
+  top:520px;margin-top:-1.2em;font-size:200px;line-height:1.14;letter-spacing:.02em;}
+.L-center .body{left:50%;transform:translateX(-50%);width:1200px;text-align:center;
+  top:776px;font-size:48px;letter-spacing:.06em;}
+/* top 776 而不是 800：两行 48px×1.62=156px，800+156=956 会越过 940 的底部安全线
+   （抖音横屏底部有文案/音乐条）。qa 的 safe-bottom 就是抓这个。 */
+.L-center .node{left:50%;top:50%;transform:translate(-50%,-50%);opacity:.62;}
+
+/* L-data：上图下文（大数字由 canvas 画） */
+.L-data .kick{left:50%;transform:translateX(-50%);top:42px;}
+.L-data .title{left:50%;transform:translateX(-50%);top:96px;width:1500px;
+  text-align:center;max-width:1500px;}
+.L-data .node{left:590px;top:330px;}
+.L-data .body{left:50%;transform:translateX(-50%);top:776px;width:1200px;
+  text-align:center;max-width:1200px;}
+
+/* L-vert：竖排古文 */
+.L-vert .title{writing-mode:vertical-rl;text-orientation:upright;
+  font-size:96px;line-height:1.55;letter-spacing:.08em;font-weight:400;
+  right:360px;top:190px;left:auto;height:660px;max-width:none;}
+.L-vert .body{writing-mode:horizontal-tb;
+  font-size:34px;line-height:1.75;letter-spacing:.04em;color:var(--ink-2);
+  left:120px;right:auto;top:auto;bottom:150px;width:600px;height:auto;max-width:600px;}
+.L-vert .node{left:0;top:0;}
+
+/* L-formula */
+.L-formula .kick{left:50%;transform:translateX(-50%);top:42px;}
+.L-formula .title{left:50%;transform:translateX(-50%);top:132px;width:1500px;
+  text-align:center;font-size:64px;font-weight:400;color:var(--ink-2);max-width:1500px;}
+.L-formula .node{left:260px;top:230px;}
+.L-formula .body{left:50%;transform:translateX(-50%);top:800px;width:1200px;
+  text-align:center;max-width:1200px;}
+</style>
+</head>
+<body>
+<script id="story-data">/*__STORY__*/</script>
+<div id="stage">
+  <canvas id="fx" width="1920" height="1080"></canvas>
+  <div id="scenes"></div>
+  <div id="vignette"></div>
+  <div id="noise"></div>
+</div>
+
+<script>
+/* =====================================================================
+   大数定律 · 横屏知识视频引擎
+   契约：window.seek(t) t∈[0,1] 纯函数；window.__duration 秒
+   ===================================================================== */
+const STORY = window.__STORY__;
+const W = 1920, H = 1080;
+const BOX_W = 740, BOX_H = 660;        // 图形盒
+const BEAT_P = 0.53142, BEAT_PH = 0.0702;
+
+const beatPos = (t) => { const x = (t - BEAT_PH) / BEAT_P; return x - Math.floor(x); };
+const clamp = (v, a = 0, b = 1) => v < a ? a : v > b ? b : v;
+const lerp  = (a, b, t) => a + (b - a) * t;
+
+/* ---------- cubic-bezier ---------- */
+function cb(x1, y1, x2, y2){
+  const A = (a,b)=>1-3*b+3*a, B = (a,b)=>3*b-6*a, C = a=>3*a;
+  const calc = (t,a,b)=>((A(a,b)*t+B(a,b))*t+C(a))*t;
+  const slope= (t,a,b)=>3*A(a,b)*t*t+2*B(a,b)*t+C(a);
+  return function(x){
+    if (x <= 0) return 0; if (x >= 1) return 1;
+    let t = x;
+    for (let i = 0; i < 8; i++){
+      const s = slope(t, x1, x2);
+      if (Math.abs(s) < 1e-6) break;
+      t -= (calc(t, x1, x2) - x) / s;
+      t = clamp(t, 0, 1);
+    }
+    return calc(t, y1, y2);
+  };
+}
+const MB = {
+  M1: cb(.22,.61,.36,1),   // FadeRise
+  M2: cb(.40,0,.15,1),     // DrawLine
+  M3: cb(.34,1.56,.64,1),  // DotPop
+  M4: cb(.215,.61,.355,1), // CountUp
+  M5: cb(.65,0,.35,1),     // MaskWipe
+  M6: cb(.33,1,.68,1),     // HairGrow
+};
+/* 屏内毫秒 → 缓动进度 */
+const P = (ms, start, dur, ease) => (ease || MB.M1)(clamp((ms - start) / dur));
+
+/* ---------- 场景预处理 ---------- */
+let CURSOR = 0;
+const SC = STORY.scenes.map((s, i) => {
+  const o = Object.assign({}, s, { start: CURSOR, end: CURSOR + s.dur, i });
+  CURSOR += s.dur;
+  return o;
+});
+const DURATION = CURSOR;
+window.__duration = DURATION;
+
+/* ---------- qa.mjs 的内省契约：与竖屏模板同名，qa 换画幅不用改 ---------- */
+window.__scenes = SC.map((s) => ({
+  i: s.i,
+  // 横屏没有 type 字段，用 layout 顶上。data 版式的主体是 300px+ 大数字，
+  // 文字覆盖率天然很低，等同于竖屏的 stat —— 不这样映射会被误报「画面偏空」。
+  type: s.layout === 'data' ? 'stat' : (s.layout || 'split'),
+  start: s.start,
+  dur: s.dur,
+}));
+
+/* ---------- 字符宽度（em 近似） ---------- */
+const wOf = (s) => [...String(s).replace(/<[^>]+>/g, '')]
+  .reduce((a, ch) => a + (/[\u4e00-\u9fa5\u3000-\u303f\uff00-\uffef]/.test(ch) ? 1 : 0.56), 0);
+
+/* ---------- 构建 DOM ---------- */
+const scenesEl = document.getElementById('scenes');
+const richify = (s) => String(s);
+
+SC.forEach((s, i) => {
+  const sec = document.createElement('section');
+  sec.className = 'scene L-' + (s.layout || 'split');
+  sec.dataset.id = s.id;
+
+  let html = '';
+  if (s.kicker || s.kickerEn) {
+    html += `<div class="kick"><span class="bar"></span>` +
+      (s.kicker ? `<span class="cn">${s.kicker}</span>` : '') +
+      (s.kickerEn ? `<span class="en">${s.kickerEn}</span>` : '') + `</div>`;
+  }
+  if (s.title && s.title.length) {
+    html += `<h1 class="title">` + s.title.map(l =>
+      `<span class="ln"><b>${richify(l)}</b></span>`).join('') + `</h1>`;
+  }
+  if (s.body) {
+    const lines = String(s.body).split('\n').map(l => l.trim()).filter(Boolean);
+    html += `<p class="body">` + lines.map(l =>
+      `<span class="ln"><b>${richify(l)}</b></span>`).join('') + `</p>`;
+  }
+  if (s.node && s.node !== 'none') {
+    const full = (s.node === 'ancient-quote') || s.layout === 'center';
+    const w = full ? 1920 : (s.layout === 'formula' ? 1400 : BOX_W);
+    const boxH = (s.layout === 'data') ? 600 : BOX_H;
+    const h = full ? 1080 : boxH;
+    html += `<canvas class="node" width="${w*2}" height="${h*2}"
+      style="width:${w}px;height:${h}px"></canvas>`;
+  }
+  if (s.foot) html += `<div class="foot">${s.foot}</div>`;
+  html += `<div class="idx">${String(i+1).padStart(2,'0')} / ${String(SC.length).padStart(2,'0')}</div>`;
+
+  sec.innerHTML = html;
+  scenesEl.appendChild(sec);
+
+  s._el = sec;
+  s._titleEl = sec.querySelector('.title');
+  s._titleB = [...sec.querySelectorAll('.title .ln>b')];
+  s._bodyB  = [...sec.querySelectorAll('.body .ln>b')];
+  s._kick   = sec.querySelector('.kick');
+  s._kickBar= sec.querySelector('.kick .bar');
+  s._node   = sec.querySelector('canvas.node');
+  s._full   = (s.node === 'ancient-quote') || s.layout === 'center';
+
+  /* 标题字号自适应：不超过容器宽 */
+  if (s._titleEl && s.title && s.layout !== 'vert' && s.layout !== 'formula') {
+    const maxEm = Math.max(...s.title.map(wOf));
+    const container = s.layout === 'data' || s.layout === 'formula' || s.layout === 'center'
+      ? (s.layout === 'center' ? 1400 : 1420) : 900;
+    const base = s.layout === 'center' ? 200 : (s.layout === 'data' ? 96 : 152);
+    const fit = Math.min(base, Math.floor(container / Math.max(maxEm, 1) * 0.97));
+    s._titleEl.style.fontSize = fit + 'px';
+  }
+});
+
+/* ---------- 噪声（256 平铺） ---------- */
+(function(){
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const x = c.getContext('2d');
+  const d = x.createImageData(256, 256);
+  for (let i = 0; i < d.data.length; i += 4) {
+    const v = Math.random() * 255;
+    d.data[i] = d.data[i+1] = d.data[i+2] = v;
+    d.data[i+3] = 255;
+  }
+  x.putImageData(d, 0, 0);
+  const el = document.getElementById('noise');
+  el.style.backgroundImage = `url(${c.toDataURL()})`;
+  el.style.backgroundRepeat = 'repeat';
+})();
+
+const fx = document.getElementById('fx').getContext('2d');
+const stage = document.getElementById('stage');
+let curIdx = -1;
+
+/* ---------- 主循环（纯函数） ---------- */
+function seek(t){
+  const T = clamp(t, 0, 1) * DURATION;
+
+  let idx = SC.findIndex(s => T >= s.start && T < s.end);
+  if (idx < 0) idx = SC.length - 1;
+  window.__dbgIdx = idx;
+  const s = SC[idx];
+
+  if (idx !== curIdx) {
+    SC.forEach((x, i) => x._el.classList.toggle('on', i === idx));
+    curIdx = idx;
+  }
+
+  const lt = clamp((T - s.start) / s.dur, 0, 0.99999);
+  const ms = lt * s.dur * 1000;          // 屏内毫秒
+
+  /* 拍点呼吸 */
+  const bp = beatPos(T);
+  const pulse = Math.exp(-bp / 0.085);
+  stage.style.transform = `scale(${1 + 0.008 * pulse})`;
+  stage.style.filter = `brightness(${1 + 0.018 * pulse})`;
+
+  drawFX(T);
+
+  /* --- kicker：M6 金杠 + M1 文字 --- */
+  if (s._kick) {
+    const kp = P(ms, 0, 266, MB.M6);
+    s._kick.style.opacity = clamp(P(ms, 0, 300, MB.M1) * 1.6, 0, 1);
+    if (s._kickBar) s._kickBar.style.transform = `scaleX(${kp})`;
+  }
+
+  /* --- 标题：M1 --- */
+  textIn(s._titleB, ms, 0, 67);
+
+  /* --- 正文：M1 @ 12.5% --- */
+  const bodyAt = (s.layout === 'center') ? 400 : 531;
+  textIn(s._bodyB, ms, bodyAt, 67);
+
+  /* --- 图形 --- */
+  if (s._node) {
+    const ctx = s._node.getContext('2d');
+    const w = s._node.width / 2, h = s._node.height / 2;
+    ctx.setTransform(2, 0, 0, 2, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    ctx.lineCap = 'round';
+    const fn = NODES[s.node];
+    if (fn) fn(ctx, w, h, lt, s, T, ms);
+  }
+}
+
+/* ---------- 文字入场 M1 ---------- */
+function textIn(elems, ms, start, stagger){
+  elems.forEach((b, i) => {
+    const p = MB.M1(clamp((ms - start - i * stagger) / 531));
+    b.style.transform = `translateY(${(1 - p) * 28}px)`;
+    b.style.opacity = p;
+  });
+}
+
+/* ---------- 全屏氛围 ---------- */
+const MOTES = Array.from({length: 40}, () => ({
+  x: Math.random(), y: Math.random(),
+  r: 0.6 + Math.random() * 1.7,
+  sp: 0.004 + Math.random() * 0.010,
+  ph: Math.random() * 6.283,
+  a: 0.05 + Math.random() * 0.12
+}));
+function drawFX(T){
+  fx.clearRect(0, 0, W, H);
+  const glow = Math.exp(-beatPos(T) / 0.16);
+  const g = fx.createRadialGradient(W*0.5, H*0.5, 0, W*0.5, H*0.5, W*0.60);
+  g.addColorStop(0, `rgba(227,164,78,${0.022 + 0.020*glow})`);
+  g.addColorStop(0.55,'rgba(227,164,78,0.006)');
+  g.addColorStop(1, 'rgba(227,164,78,0)');
+  fx.fillStyle = g; fx.fillRect(0, 0, W, H);
+
+  for (const m of MOTES){
+    const y = ((m.y - T * m.sp) % 1 + 1) % 1;
+    const x = (m.x + Math.sin(T * 0.20 + m.ph) * 0.010) % 1;
+    fx.beginPath(); fx.arc(x*W, y*H, m.r, 0, 6.2832);
+    fx.fillStyle = `rgba(244,240,232,${m.a * (0.5 + 0.5*Math.sin(T*1.1+m.ph))})`;
+    fx.fill();
+  }
+}
+
+/* =====================================================================
+   图形母题 —— 坐标随画布自适应：box(740×660) 与 full(1920×1080) 同一套代码
+   ===================================================================== */
+const BR = '227,164,78', PA = '244,240,232', GZ = '127,168,184', RD = '212,74,42';
+const NODES = {};
+
+const line = (c, x1, y1, x2, y2, col, w) => {
+  c.beginPath(); c.moveTo(x1, y1); c.lineTo(x2, y2);
+  c.strokeStyle = col; c.lineWidth = w; c.stroke();
+};
+const disc = (c, x, y, r, col) => {
+  c.beginPath(); c.arc(x, y, r, 0, 6.2832); c.fillStyle = col; c.fill();
+};
+const ring = (c, x, y, r, col, w) => {
+  c.beginPath(); c.arc(x, y, r, 0, 6.2832); c.strokeStyle = col; c.lineWidth = w; c.stroke();
+};
+const rng = (seed0) => { let x = seed0; return () => { x = (x * 16807) % 2147483647; return x / 2147483647; }; };
+
+/* 1. 硬币序列：一排，正面实心金 / 反面空心白 */
+NODES['coin-sequence'] = (c, w, h, lt, s, T, ms) => {
+  const n = s.seqN || 10;
+  const seq = s.seq || null;
+  const cy = h * 0.50;
+  const x0 = w * 0.05, x1 = w * 0.95;
+  const gapD = (x1 - x0) / (n - 1);
+  const d = Math.min(gapD * 0.78, h * 0.13);
+  let heads = 0;
+
+  // 骨架线：M2
+  const lp = P(ms, 200, 900, MB.M2);
+  if (lp > 0) line(c, x0 - 10, cy, x0 - 10 + (x1 - x0 + 20) * lp, cy, `rgba(${GZ},0.30)`, 1);
+
+  for (let i = 0; i < n; i++){
+    const p = MB.M3(clamp((ms - 120 - i * 60) / 170));
+    if (p <= 0) continue;
+    const cx = x0 + i * gapD;
+    const isHead = seq ? !!seq[i] : (i % 3 !== 2);
+    if (isHead) heads += p;
+    const r = (d/2) * (0.62 + 0.38 * p);
+
+    if (isHead){
+      ring(c, cx, cy, r, `rgba(${BR},${p})`, 2);
+      disc(c, cx, cy, r * 0.78, `rgba(${BR},${p})`);
+      ring(c, cx, cy, r * 0.44, `rgba(7,8,10,${0.7*p})`, 1.5);
+    } else {
+      ring(c, cx, cy, r, `rgba(${PA},${0.62*p})`, 2);
+      c.beginPath();
+      c.arc(cx, cy, r, 0, 6.2832);
+      c.fillStyle = `rgba(${PA},${0.05*p})`; c.fill();
+    }
+  }
+
+  // 结果：右上角
+  if (ms > 700){
+    const ap = P(ms, 700, 700, MB.M1);
+    c.textAlign = 'right'; c.textBaseline = 'alphabetic';
+    c.font = `600 ${Math.round(h*0.15)}px Bahnschrift`;
+    c.fillStyle = `rgba(${BR},${ap})`;
+    c.fillText(`${Math.round(heads)}/${n}`, x1, h * 0.17);
+    c.font = `400 ${Math.round(h*0.040)}px Bahnschrift`;
+    c.fillStyle = `rgba(${PA},${0.45*ap})`;
+    c.fillText(`${Math.round(heads/n*100)}%  HEADS`, x1, h * 0.235);
+  }
+};
+
+/* 2. 点阵：17×11，铺满画布 */
+NODES['dot-grid'] = (c, w, h, lt, s, T, ms) => {
+  const cols = 17, rows = 11;
+  const gap = Math.min(w * 0.86 / (cols - 1), h * 0.62 / (rows - 1));
+  const ox = (w - gap * (cols - 1)) / 2;
+  const oy = (h - gap * (rows - 1)) / 2;
+  const per = Math.max(5, (1650) / (cols * rows));
+  const base = Math.min(gap * 0.13, 7);
+
+  const lp = P(ms, 500, 900, MB.M2);
+  if (lp > 0) line(c, 0, h/2, w * lp, h/2, `rgba(${GZ},0.18)`, 1);
+
+  for (let j = 0; j < rows; j++){
+    for (let i = 0; i < cols; i++){
+      const k = j * cols + i;
+      const p = MB.M3(clamp((ms - 900 - k * per) / 170));
+      const cx = ox + i * gap, cy = oy + j * gap;
+      if (p <= 0){
+        disc(c, cx, cy, base * 0.42, `rgba(${PA},0.10)`);
+        continue;
+      }
+      const hit = (k * 7919) % 100 < 38;
+      if (hit) disc(c, cx, cy, base * (0.7 + 0.3*p), `rgba(${BR},${p*0.95})`);
+      else disc(c, cx, cy, base * 0.5 * (0.7 + 0.3*p), `rgba(${PA},${p*0.30})`);
+    }
+  }
+};
+
+/* 3. 散点收敛 */
+NODES['scatter-trend'] = (c, w, h, lt, s, T, ms) => {
+  const n = s.n || 90;
+  const x0 = w * 0.06, x1 = w * 0.95, yy = h * 0.86, cy = h * 0.50;
+  const ap = P(ms, 400, 900, MB.M2);
+
+  line(c, x0, h * 0.12, x0, yy, `rgba(${PA},0.16)`, 1);
+  line(c, x0, yy, x0 + (x1 - x0) * ap, yy, `rgba(${PA},0.26)`, 1);
+
+  const rnd = rng(20261018);
+  const amp = h * 0.29;
+  for (let i = 0; i < n; i++){
+    const u = i / (n - 1);
+    const pp = MB.M3(clamp((ms - 900 - i * 14) / 170));
+    if (pp <= 0) continue;
+    const x = x0 + w*0.03 + u * (x1 - x0 - w*0.06);
+    const sigma = lerp(amp, amp * 0.06, u);
+    const y = cy + (rnd() * 2 - 1) * sigma;
+    disc(c, x, y, Math.min(5.6, w*0.0075) * pp, `rgba(${PA},${0.78*pp})`);
+  }
+
+  const tp = P(ms, 1400, 1100, MB.M2);
+  if (tp > 0){
+    c.beginPath();
+    for (let i = 0; i <= 100 * tp; i++){
+      const u = i / 100;
+      const x = x0 + w*0.03 + u * (x1 - x0 - w*0.06);
+      const y = cy + Math.sin(u * 7.0) * lerp(amp * 0.24, amp * 0.015, u);
+      i === 0 ? c.moveTo(x, y) : c.lineTo(x, y);
+    }
+    c.strokeStyle = `rgba(${BR},0.95)`; c.lineWidth = 2.4; c.stroke();
+  }
+};
+
+/* 4. 波动带收敛 */
+NODES['band-converge'] = (c, w, h, lt, s, T, ms) => {
+  const x0 = w * 0.05, x1 = w * 0.96, cy = h * 0.50;
+  const amp0 = h * 0.34;
+  const gp = P(ms, 300, 900, MB.M2);
+
+  // 理论中线（冷釉蓝）
+  line(c, x0, cy, x0 + (x1 - x0) * gp, cy, `rgba(${GZ},0.90)`, 1.6);
+
+  const bands = [
+    { a: 1.00, op: 0.46, wd: 2.0, t: 200 },
+    { a: 0.62, op: 0.28, wd: 1.5, t: 400 },
+    { a: 0.34, op: 0.16, wd: 1.2, t: 600 },
+  ];
+  bands.forEach((bd, k) => {
+    const p = P(ms, bd.t, 1000, MB.M2);
+    if (p <= 0) return;
+    const xe = x0 + (x1 - x0) * p;
+    for (const sign of [-1, 1]){
+      c.beginPath();
+      for (let x = x0; x <= xe; x += 2){
+        const t = (x - x0) / (x1 - x0);
+        const half = amp0 * bd.a / Math.sqrt(1 + 22*t*t);
+        const wob = Math.sin(x*0.022 + k*2.1) * 0.35 + Math.sin(x*0.058) * 0.16;
+        const y = cy + sign * (half + half * wob * 0.30);
+        x === x0 ? c.moveTo(x, y) : c.lineTo(x, y);
+      }
+      c.strokeStyle = `rgba(${PA},${bd.op})`; c.lineWidth = bd.wd; c.stroke();
+    }
+  });
+
+  // 金色收敛带
+  const ip = P(ms, 1100, 1100, MB.M2);
+  if (ip > 0){
+    const xe = x0 + (x1 - x0) * ip;
+    c.beginPath();
+    for (let x = x0; x <= xe; x += 2){
+      const t = (x - x0) / (x1 - x0);
+      c.lineTo(x, cy - amp0 * 0.085 / Math.sqrt(1 + 22*t*t));
+    }
+    for (let x = xe; x >= x0; x -= 2){
+      const t = (x - x0) / (x1 - x0);
+      c.lineTo(x, cy + amp0 * 0.085 / Math.sqrt(1 + 22*t*t));
+    }
+    c.closePath();
+    c.fillStyle = `rgba(${BR},0.16)`; c.fill();
+  }
+
+  if (ms > 1600){
+    const ap = P(ms, 1600, 500, MB.M1);
+    c.textAlign = 'right'; c.font = `400 ${Math.round(h*0.037)}px Bahnschrift`;
+    c.fillStyle = `rgba(${PA},${0.38*ap})`;
+    c.fillText('n = 10', x1, h * 0.30);
+    c.fillText('n = 1000', x1, h * 0.70);
+  }
+};
+
+/* 5. 1/√n 曲线 */
+NODES['sqrt-curve'] = (c, w, h, lt, s, T, ms) => {
+  const x0 = w * 0.06, x1 = w * 0.95, cy = h * 0.50;
+  const amp = h * 0.34;
+  const ap = P(ms, 300, 900, MB.M2);
+  line(c, x0, cy, x0 + (x1 - x0) * ap, cy, `rgba(${GZ},0.60)`, 1.6);
+
+  const dp = P(ms, 600, 1500, MB.M2);
+  if (dp > 0){
+    const xe = x0 + (x1 - x0) * dp;
+    // 填充上下包络
+    c.beginPath();
+    for (let x = x0; x <= xe; x += 2){
+      const t = (x - x0) / (x1 - x0);
+      c.lineTo(x, cy - amp / Math.sqrt(1 + 11*t));
+    }
+    for (let x = xe; x >= x0; x -= 2){
+      const t = (x - x0) / (x1 - x0);
+      c.lineTo(x, cy + amp / Math.sqrt(1 + 11*t));
+    }
+    c.closePath();
+    c.fillStyle = `rgba(${BR},0.10)`; c.fill();
+
+    for (const sign of [-1, 1]){
+      c.beginPath();
+      for (let x = x0; x <= xe; x += 2){
+        const t = (x - x0) / (x1 - x0);
+        c.lineTo(x, cy + sign * amp / Math.sqrt(1 + 11*t));
+      }
+      c.strokeStyle = `rgba(${BR},0.95)`; c.lineWidth = 2.4; c.stroke();
+    }
+  }
+
+  if (ms > 1500){
+    const tp = P(ms, 1500, 500, MB.M1);
+    c.textAlign = 'center'; c.font = `400 ${Math.round(h*0.036)}px Bahnschrift`;
+    c.fillStyle = `rgba(${PA},${0.40*tp})`;
+    c.fillText('SAMPLE SIZE  n', w/2, h * 0.90);
+    c.textAlign = 'left';
+    c.fillText('σ ∝ 1/√n', x0, h * 0.14);
+  }
+};
+
+/* 6. counter：右锚，基线 360 */
+NODES['counter'] = (c, w, h, lt, s, T, ms) => {
+  const b = s.big || { from: 0, to: 100, decimals: 0 };
+  const p = P(ms, 1100, 2200, MB.M4);
+  const v = b.from + (b.to - b.from) * p;
+  const dec = b.decimals ?? 0;
+  const str = v.toFixed(dec);
+  const anchor = w * 0.88;
+
+  const size = str.length <= 3 ? 330 : str.length === 4 ? 292 : str.length === 5 ? 232 : 192;
+
+  c.textAlign = 'right'; c.textBaseline = 'alphabetic';
+  c.font = `600 ${size}px Bahnschrift`;
+  c.fillStyle = `rgba(${PA},1)`;
+  c.fillText(str, anchor, 340);
+
+  const tw = c.measureText(str).width;
+
+  const up = P(ms, 1100, 900, MB.M2);
+  line(c, anchor - tw * up, 412, anchor, 412, `rgba(${BR},0.85)`, 2);
+
+  if (b.unit){
+    c.textAlign = 'left';
+    c.font = `400 ${Math.round(size*0.24)}px Bahnschrift`;
+    c.fillStyle = `rgba(${PA},0.50)`;
+    c.fillText(b.unit, anchor + 10, 340);
+  }
+
+  // 50% 期望线
+  const ep = P(ms, 500, 800, MB.M2);
+  if (ep > 0){
+    const ex = w * 0.05 + (w * 0.90 * 0.5) * ep;
+    c.setLineDash([7, 12]);
+    line(c, ex, h * 0.12, ex, h * 0.90, `rgba(${GZ},0.50)`, 1);
+    c.setLineDash([]);
+    c.textAlign = 'left'; c.font = `400 ${Math.round(h*0.034)}px Bahnschrift`;
+    c.fillStyle = `rgba(${GZ},${0.62*ep})`;
+    c.fillText('E = 50%', ex + 14, h * 0.135);
+  }
+};
+
+/* 7. 赌场盘：37 格轮盘 + 朱砂指针卡在 1%–2% */
+NODES['casino'] = (c, w, h, lt, s, T, ms) => {
+  const cx = w * 0.50, cy = h * 0.50;
+  const r = Math.min(w, h) * 0.34;
+  const rp = P(ms, 0, 850, MB.M5);
+
+  if (rp > 0){
+    c.beginPath();
+    c.arc(cx, cy, r, -Math.PI/2, -Math.PI/2 + 6.2832 * rp);
+    c.strokeStyle = `rgba(${PA},0.55)`; c.lineWidth = 2.2; c.stroke();
+  }
+
+  const tp = P(ms, 250, 1100, MB.M2);
+  for (let i = 0; i < 37; i++){
+    if (i / 37 > tp) break;
+    const a = -Math.PI/2 + i * (6.2832/37);
+    const inner = r - (i % 3 === 0 ? r*0.13 : r*0.07);
+    line(c, cx + Math.cos(a)*inner, cy + Math.sin(a)*inner,
+            cx + Math.cos(a)*(r-2), cy + Math.sin(a)*(r-2),
+            `rgba(${PA},${i % 3 === 0 ? 0.40 : 0.20})`, i % 3 === 0 ? 1.6 : 1);
+  }
+
+  // 朱砂指针：转 3 圈后停在极窄扇区
+  const pp = P(ms, 500, 2200, MB.M4);
+  if (pp > 0){
+    const a = lerp(-Math.PI/2, -Math.PI/2 + 6.2832*3 + 0.18, pp);
+    line(c, cx, cy, cx + Math.cos(a)*(r - r*0.18), cy + Math.sin(a)*(r - r*0.18), `rgba(${RD},0.95)`, 3.5);
+    disc(c, cx, cy, r*0.045, `rgba(${PA},0.95)`);
+    ring(c, cx, cy, r*0.045 + 5, `rgba(${PA},0.35)`, 1.2);
+  }
+};
+
+/* 8. 钟形曲线收窄 */
+NODES['bell-curve'] = (c, w, h, lt, s, T, ms) => {
+  const baseY = h * 0.72, cx = w * 0.50;
+  const x0 = w * 0.05, x1 = w * 0.95;
+  const dp = P(ms, 400, 1100, MB.M2);
+  const narrow = P(ms, 1300, 1100, MB.M5);
+  const sg = lerp(Math.min(w,h) * 0.34, Math.min(w,h) * 0.155, narrow);
+  const peakH = lerp((baseY - h*0.16) * 0.72, baseY - h*0.16, narrow);
+
+  const yOf = (x) => {
+    const g = Math.exp(-((x-cx)*(x-cx)) / (2*sg*sg));
+    return baseY - g * peakH * 0.90;
+  };
+
+  if (dp > 0){
+    const xe = x0 + (x1 - x0) * dp;
+    c.beginPath();
+    c.moveTo(x0, baseY);
+    for (let x = x0; x <= xe; x += 2) c.lineTo(x, yOf(x));
+    c.lineTo(xe, baseY); c.closePath();
+    c.fillStyle = `rgba(${BR},0.16)`; c.fill();
+
+    c.beginPath();
+    for (let x = x0; x <= xe; x += 2){
+      x === x0 ? c.moveTo(x, yOf(x)) : c.lineTo(x, yOf(x));
+    }
+    c.strokeStyle = `rgba(${BR},0.95)`; c.lineWidth = 2.4; c.stroke();
+  }
+
+  const bl = P(ms, 400, 1000, MB.M2);
+  line(c, x0, baseY, x0 + (x1-x0)*bl, baseY, `rgba(${PA},0.24)`, 1);
+
+  const ap = P(ms, 500, 800, MB.M2);
+  if (ap > 0){
+    c.setLineDash([5, 10]);
+    line(c, cx, baseY, cx, baseY - peakH*0.9*ap, `rgba(${GZ},0.45)`, 1);
+    c.setLineDash([]);
+  }
+
+  // 数字标注
+  if (s.big && ms > 900){
+    const np = P(ms, 900, 700, MB.M1);
+    const p2 = P(ms, 900, 1800, MB.M4);
+    const v = lerp(s.big.from, s.big.to, p2);
+    c.textAlign = 'right'; c.textBaseline = 'alphabetic';
+    c.font = `600 ${Math.round(h*0.13)}px Bahnschrift`;
+    c.fillStyle = `rgba(${BR},${np})`;
+    c.fillText(v.toFixed(s.big.decimals ?? 1) + (s.big.unit || ''), x1, h*0.115);
+  }
+};
+
+/* 9. 古文：全屏版式 */
+NODES['ancient-quote'] = (c, w, h, lt, s, T, ms) => {
+  const lp = P(ms, 0, 850, MB.M5);
+  if (lp > 0){
+    line(c, 120, 270, 120, 270 + 300 * lp, `rgba(${BR},0.65)`, 2.5);
+    line(c, 1800, 270, 1800, 270 + 300 * lp, `rgba(${BR},0.65)`, 2.5);
+    // 左侧竖排细线组：给留白一个结构
+    for (let i = 0; i < 7; i++){
+      const x = 200 + i * 34;
+      line(c, x, 300, x, 300 + 200 * lp * (0.6 + (i % 3) * 0.2), `rgba(${PA},0.055)`, 1);
+    }
+  }
+  // 朱砂印章
+  const sp = P(ms, 900, 600, MB.M3);
+  if (sp > 0){
+    const bx = 210, by = 700, bw = 104;
+    c.strokeStyle = `rgba(${RD},${0.85*sp})`; c.lineWidth = 3;
+    c.strokeRect(bx, by, bw, bw);
+    c.fillStyle = `rgba(${RD},${0.10*sp})`;
+    c.fillRect(bx, by, bw, bw);
+  }
+
+  const qp = P(ms, 250, 700, MB.M1);
+  if (qp > 0){
+    c.textAlign = 'left'; c.textBaseline = 'alphabetic';
+    c.font = `700 130px Noto Sans SC`;
+    c.fillStyle = `rgba(${BR},${0.30*qp})`;
+    c.fillText('\u201C', 250, 400);
+    c.textAlign = 'right';
+    c.fillText('\u201D', 1700, 830);
+  }
+
+  // 底部一条细金线，收住竖排文字
+  const bp = P(ms, 700, 900, MB.M2);
+  if (bp > 0){
+    line(c, 250, 900, 250 + 380 * bp, 900, `rgba(${BR},0.30)`, 1.2);
+  }
+};
+
+/* 10. 公式：主式 + 条件注（下标手动排版，避免 unicode 下标 fallback） */
+NODES['formula'] = (c, w, h, lt, s, T, ms) => {
+  const cx = w * 0.50, cy = h * 0.45;
+  const p1 = P(ms, 250, 800, MB.M1);
+  const p2 = P(ms, 900, 900, MB.M1);
+  const p3 = P(ms, 1300, 800, MB.M2);
+  const size = Math.round(h * 0.150);
+  const subSize = Math.round(size * 0.52);
+
+  const A = 'P( |X\u0304';
+  const B = ' \u2212 \u03BC | < \u03B5 )  \u2192  1';
+
+  c.textBaseline = 'middle';
+  c.font = `500 ${size}px Bahnschrift`;
+  const wA = c.measureText(A).width;
+  const wB = c.measureText(B).width;
+  c.font = `500 ${subSize}px Bahnschrift`;
+  const wS = c.measureText('n').width;
+  const sx = cx - (wA + wS + wB) / 2;
+
+  c.textAlign = 'left';
+  c.font = `500 ${size}px Bahnschrift`;
+  c.fillStyle = `rgba(${PA},${0.96*p1})`;
+  c.fillText(A, sx, cy);
+  c.font = `500 ${subSize}px Bahnschrift`;
+  c.fillText('n', sx + wA, cy + size * 0.24);
+  c.font = `500 ${size}px Bahnschrift`;
+  c.fillText(B, sx + wA + wS, cy);
+
+  if (p3 > 0){
+    line(c, cx - (wA+wS+wB)*0.42*p3, cy + size*0.62, cx + (wA+wS+wB)*0.42*p3, cy + size*0.62,
+         `rgba(${BR},0.42)`, 1.4);
+  }
+
+  c.textAlign = 'center';
+  c.font = `400 ${Math.round(h*0.062)}px Bahnschrift`;
+  c.fillStyle = `rgba(${BR},${0.90*p2})`;
+  c.fillText('n  \u2192  \u221E', cx, cy + h*0.225);
+};
+
+/* 11. 同心环 */
+NODES['concentric'] = (c, w, h, lt, s, T, ms) => {
+  const cx = w * 0.50, cy = h * 0.50;
+  const R = Math.min(w, h) * 0.40;
+  const radii = [0.26, 0.45, 0.63, 0.82, 1.00].map(k => R * k);
+  const ops = [0.62, 0.48, 0.36, 0.27, 0.18];
+
+  radii.forEach((r, i) => {
+    const p = P(ms, i * 100, 850, MB.M5);
+    if (p <= 0) return;
+    ring(c, cx, cy, r, `rgba(${PA},${ops[i]*p})`, i < 2 ? 2 : 1.2);
+    const ang = -Math.PI/2 + ms * 0.0011 * (200 / r);
+    disc(c, cx + Math.cos(ang)*r, cy + Math.sin(ang)*r, Math.max(3, R*0.016) * p, `rgba(${BR},${p*0.9})`);
+  });
+
+  const cp = P(ms, 0, 600, MB.M3);
+  disc(c, cx, cy, Math.max(4, R*0.022) * cp, `rgba(${PA},${cp})`);
+};
+
+/* 12. 粒子收敛成窄带 */
+NODES['particles'] = (c, w, h, lt, s, T, ms) => {
+  const n = s.n || 120;
+  const cx = w * 0.50, cy = h * 0.50;
+  const conv = P(ms, 900, 1600, MB.M5);
+  const gp = P(ms, 400, 900, MB.M2);
+  const band = Math.max(6, h * 0.012);
+
+  if (gp > 0){
+    c.setLineDash([7, 9]);
+    line(c, w*0.05, cy, w*0.05 + (w*0.90) * gp, cy, `rgba(${GZ},0.32)`, 1);
+    c.setLineDash([]);
+  }
+
+  const rnd = rng(99173);
+  for (let i = 0; i < n; i++){
+    const p = MB.M3(clamp((ms - i * 7) / 170));
+    if (p <= 0) continue;
+    const ax = cx + (rnd()*2-1) * w * 0.44;
+    const ay = cy + (rnd()*2-1) * h * 0.42;
+    const bx = w * 0.05 + rnd() * w * 0.90;
+    const by = cy + (rnd()*2-1) * band;
+    const x = lerp(ax, bx, conv), y = lerp(ay, by, conv);
+    const onBand = conv > 0.5 && Math.abs(y - cy) < band * 1.6;
+    disc(c, x, y, Math.min(4.2, w*0.0055) * p,
+      onBand ? `rgba(${BR},${0.9*p})` : `rgba(${PA},${0.38*p})`);
+  }
+};
+
+/* ---------- 启动 ---------- */
+const seekImpl = seek;
+window.seek = function(t){
+  try { seekImpl(t); }
+  catch(e){ window.__error = (e && e.stack) || String(e); console.error(e); }
+};
+(async function(){
+  let msg = 'OK';
+  window.__fonts = [];
+  try {
+    // 中文字体必须先显式 load 再 seek(0)：不 load 就截首帧，拿到的是回退字形。
+    // 竖屏模板踩过这个坑，横屏同样适用（尤其字体改成打包文件后，加载是异步的）。
+    await Promise.all([
+      document.fonts.load('300 40px "Noto Sans SC"'),
+      document.fonts.load('500 40px "Noto Sans SC"'),
+    ]).catch(() => []);
+    window.__fonts = document.fonts.check('500 40px "Noto Sans SC"') ? [] : ['Noto Sans SC'];
+
+    seekImpl(0); window.__ready = true;
+  }
+  catch(e){
+    window.__error = (e && e.stack) || String(e);
+    msg = 'ERR: ' + ((e && e.message) || String(e)) + ' @ ' +
+          ((e && e.stack) ? String(e.stack).split('\n').slice(0,2).join(' << ') : '');
+  }
+  msg += ' | n=' + SC.length + ' dur=' + DURATION.toFixed(2);
+  document.documentElement.setAttribute('data-boot', msg.slice(0, 300));
+})();
+</script>
+</body>
+</html>
