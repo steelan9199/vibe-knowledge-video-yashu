@@ -1,0 +1,14 @@
+# 构建产物
+out/
+*.log
+
+# 演示成片（3.6MB，可随时重渲，不入库）
+demo*.mp4
+
+# 个人工作副本（从 story.example.json 复制而来）
+story.json
+
+# 依赖与缓存
+node_modules/
+.DS_Store
+Thumbs.db

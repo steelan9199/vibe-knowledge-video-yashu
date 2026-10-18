@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Vibe 知识视频 · 分镜模板</title>
+<style>
+  /* ============================================================
+     字体：只允许白名单两款，且必须内嵌（系统注册名会因可变字体版本失配）
+       LXGW WenKai GB → 楷体，权重 500，用于标题/引文/大数字
+       Noto Sans SC   → 黑体，权重 300/500，用于正文/标签/HUD
+     字体文件来自 fonts/ 目录（由 init 脚本复制），SIL OFL 1.1 可商用
+     ============================================================ */
+  @font-face{
+    font-family:"LXGW WenKai GB";
+    src:url("fonts/kai500.ttf") format("truetype");
+    font-weight:500; font-style:normal; font-display:block;
+  }
+  @font-face{
+    font-family:"Noto Sans SC";
+    src:url("fonts/hei300.otf") format("opentype");
+    font-weight:300; font-style:normal; font-display:block;
+  }
+  @font-face{
+    font-family:"Noto Sans SC";
+    src:url("fonts/hei500.otf") format("opentype");
+    font-weight:500; font-style:normal; font-display:block;
+  }
+
+  /* ============================================================
+     ① 设计系统 —— 换这里 = 换全片风格
+     字体白名单只有两款，不得引入其它字体名：
+       "LXGW WenKai GB" 楷体 → 标题 / 引文 / 大数字（文气）
+       "Noto Sans SC"   黑体 → 正文 / 标签 / HUD（信息感）
+     ============================================================ */
+  :root{
+    --bg-core: #16110C;
+    --bg-mid:  #0A090C;
+    --bg-edge: #050507;
+    --ink:     #F4EFE6;
+    --ink-2:   #B4AC9C;
+    --ink-dim: #6F695C;
+    --gold:    #E0A94E;
+    --cyan:    #5FD0C8;
+    --hair:    rgba(224,169,78,.22);
+
+    --font-kai: "LXGW WenKai GB";
+    --font-hei: "Noto Sans SC";
+
+    /* 安全区：右侧按钮列 ~170px；底部文案区 ~360px */
+    --pad-x: 96px;
+    --safe-top: 172px;
+    --safe-bottom: 360px;
+  }
+
+  *{ margin:0; padding:0; box-sizing:border-box; }
+  html,body{ width:100%; height:100%; background:#000; overflow:hidden; }
+
+  #stage{
+    position:absolute; left:50%; top:50%;
+    width:1080px; height:1920px;
+    transform-origin:center center;
+    background:
+      radial-gradient(82% 46% at 50% 16%, var(--bg-core) 0%, var(--bg-mid) 48%, var(--bg-edge) 100%);
+    overflow:hidden;
+    font-family:var(--font-hei);
+    color:var(--ink);
+    -webkit-font-smoothing:antialiased;
+  }
+
+  #cool{
+    position:absolute; inset:0; pointer-events:none;
+    background:radial-gradient(58% 32% at 88% 76%, rgba(95,208,200,.06) 0%, transparent 70%);
+  }
+
+  #grid-tex{
+    position:absolute; inset:0; pointer-events:none;
+    background-image:
+      linear-gradient(to right, rgba(255,255,255,.030) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(255,255,255,.030) 1px, transparent 1px);
+    background-size:90px 90px;
+    -webkit-mask-image:radial-gradient(64% 50% at 50% 42%, #000 10%, transparent 92%);
+    mask-image:radial-gradient(64% 50% at 50% 42%, #000 10%, transparent 92%);
+  }
+
+  #fx{ position:absolute; inset:0; width:1080px; height:1920px; }
+  #dom{ position:absolute; inset:0; }
+
+  /* ---------- 场景骨架：全绝对定位，避免块间互相挤压 ---------- */
+  .scene{
+    position:absolute; inset:0;
+    opacity:0; visibility:hidden;
+    transform-origin:center center;
+  }
+  .scene.on{ visibility:visible; }
+
+  .scene .kicker{
+    position:absolute; left:var(--pad-x); top:var(--safe-top);
+    display:flex; align-items:center; gap:18px;
+    font-family:var(--font-hei); font-weight:300;
+    font-size:25px; letter-spacing:.28em;
+    color:var(--gold); text-transform:uppercase; white-space:nowrap;
+    opacity:0;
+  }
+  .scene .kicker i{ display:block; width:46px; height:1px; background:var(--gold); opacity:.7; flex:none; }
+
+  .stack{
+    position:absolute; left:var(--pad-x); right:var(--pad-x);
+    top:var(--safe-top); bottom:var(--safe-bottom);
+    display:flex; flex-direction:column; justify-content:center;
+  }
+  .stack.center{ align-items:center; text-align:center; }
+  /* 带图形的场景：文字压在上半区，下部留给画布图形，互不侵占 */
+  .stack.top{ justify-content:flex-start; padding-top:132px; }
+
+  /* ---------- 文字构件 ---------- */
+  .title{
+    font-family:var(--font-kai); font-weight:500;
+    font-size:118px; line-height:1.26; letter-spacing:.02em;
+    color:var(--ink);
+  }
+  .title .ln{ display:block; }
+  .title .ch{ display:inline-block; opacity:0; will-change:transform,opacity,filter; }
+  .title em{ font-style:normal; color:var(--gold); }
+
+  .rule{ height:1px; background:var(--hair); width:0; margin-bottom:46px; }
+
+  .body{
+    font-family:var(--font-hei); font-weight:300;
+    font-size:40px; line-height:1.9; color:var(--ink-2);
+    margin-top:54px; max-width:820px; opacity:0;
+  }
+  .body b{ color:var(--ink); font-weight:500; }
+
+  .cite{
+    font-family:var(--font-hei); font-weight:300;
+    font-size:23px; letter-spacing:.16em;
+    color:var(--ink-dim); margin-top:66px; opacity:0;
+  }
+
+  /* ---------- quote ---------- */
+  .qmark{
+    font-family:var(--font-kai); font-size:200px; line-height:.66;
+    color:var(--gold); opacity:0; margin-bottom:-40px;
+  }
+  .qtext{
+    font-family:var(--font-kai); font-weight:500;
+    font-size:72px; line-height:1.72; color:var(--ink);
+    letter-spacing:.02em;
+  }
+
+  /* ---------- stat ---------- */
+  .num{
+    font-family:var(--font-kai); font-weight:500;
+    font-size:300px; line-height:1; letter-spacing:-.02em;
+    color:var(--gold); opacity:0;
+    text-shadow:0 0 110px rgba(224,169,78,.32);
+    min-width:420px; text-align:center;
+  }
+  .unit{
+    font-family:var(--font-hei); font-weight:300;
+    font-size:38px; letter-spacing:.40em;
+    color:var(--ink-dim); margin-top:22px; opacity:0;
+  }
+  .label{
+    font-family:var(--font-hei); font-weight:300;
+    font-size:36px; line-height:1.80; color:var(--ink-2);
+    margin-top:60px; max-width:720px; opacity:0;
+  }
+
+  /* ---------- HUD ---------- */
+  #hud{ position:absolute; inset:0; pointer-events:none; font-family:var(--font-hei); }
+  #hud .corner-l{
+    position:absolute; left:var(--pad-x); top:88px;
+    display:flex; align-items:center; gap:16px;
+    font-size:22px; font-weight:300; letter-spacing:.28em; color:var(--ink-dim);
+    white-space:nowrap;
+  }
+  #hud .dot{
+    width:9px; height:9px; background:var(--gold); border-radius:1px;
+    box-shadow:0 0 16px var(--gold); flex:none;
+  }
+  #hud .sep{ opacity:.5; }
+  #hud .corner-r{
+    position:absolute; right:var(--pad-x); top:88px;
+    font-size:22px; font-weight:300; letter-spacing:.26em; color:var(--ink-dim);
+  }
+  #progress{
+    position:absolute; left:0; bottom:0; height:2px;
+    background:linear-gradient(90deg, rgba(224,169,78,.95), rgba(95,208,200,.85));
+    box-shadow:0 0 20px rgba(224,169,78,.55);
+  }
+  #grain{
+    position:absolute; inset:0; pointer-events:none;
+    opacity:.05; mix-blend-mode:overlay;
+    background-repeat:repeat; background-size:220px 220px;
+  }
+  #vignette{
+    position:absolute; left:0; right:0; bottom:0; height:440px;
+    background:linear-gradient(to top, rgba(4,4,6,.94) 0%, rgba(4,4,6,0) 100%);
+    pointer-events:none;
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="grid-tex"></div>
+  <div id="cool"></div>
+  <canvas id="fx" width="1080" height="1920"></canvas>
+  <div id="vignette"></div>
+  <div id="dom"></div>
+  <div id="hud">
+    <div class="corner-l">
+      <span class="dot"></span>
+      <span id="hud-series">SERIES</span>
+      <span class="sep">/</span>
+      <span id="hud-handle">@handle</span>
+    </div>
+    <div class="corner-r" id="hud-index">01</div>
+    <div id="progress" style="width:0"></div>
+  </div>
+  <div id="grain"></div>
+</div>
+
+<script>
+/* ============================================================
+   ② 内容层 —— 只改这个对象（其余是引擎）
+   scenes 顺序即播放顺序，dur 单位为秒
+   ============================================================ */
+const STORY = window.__STORY__ || {
+  meta: {
+    series: 'INFORMATION THEORY',  // 左上角系列名
+    handle: '@你的账号',
+    startIndex: 1,                 // 右上角起始编号
+  },
+
+  scenes: [
+    {
+      type: 'hook', dur: 5.0,
+      kicker: '信息论 · 第一讲',
+      title: ['你刷到的每一条', '都是<em>猜不到</em>的'],
+      body: '信息量的大小，和你说了多少字无关。',
+      fx: { type: 'particles', n: 70, seed: 11 },
+    },
+    {
+      type: 'quote', dur: 6.5,
+      kicker: 'CLAUDE SHANNON · 1948',
+      quote: '信息的多少，不取决于你说了什么，\n而取决于对方<em>猜不到</em>什么。',
+      cite: '《通信的数学理论》',
+    },
+    {
+      type: 'scene', dur: 7.0,
+      kicker: 'SETUP',
+      title: ['八个格子', '藏一个数字'],
+      body: '我心里想 1 到 8 的一个数。\n每问一次是非题，就排除一半可能。',
+      fx: { type: 'grid', cols: 4, rows: 2, cell: 168, gap: 40, highlight: 5 },
+    },
+    {
+      type: 'stat', dur: 6.0,
+      kicker: 'ENTROPY',
+      stat: { from: 0, to: 3, decimals: 0, unit: 'BITS' },
+      label: '八个等可能的答案，猜中它\n需要的信息量，正好 3 比特。',
+    },
+    {
+      type: 'scene', dur: 8.0,
+      kicker: 'THE CURVE',
+      title: ['越确定', '越没有信息'],
+      body: '一件事发生的概率越高，\n它告诉你的事情就越少。',
+      fx: { type: 'curve', kind: 'entropy' },
+    },
+    {
+      type: 'scene', dur: 7.5,
+      kicker: 'THE FEED',
+      title: ['算法喂给你的', '是你已经知道的'],
+      body: '推荐越准，你收到的\n新信息，越趋近于零。',
+      fx: { type: 'flow' },
+    },
+    {
+      type: 'outro', dur: 6.0,
+      kicker: 'SO',
+      title: ['真正的信息', '总带着一点<em>意外</em>'],
+      body: '去看不懂的书，见想法不同的人。',
+      cite: 'SHANNON ENTROPY',
+      fx: { type: 'particles', n: 40, seed: 5 },
+    },
+  ],
+};
+
+/* ============================================================
+   ③ 引擎
+   ============================================================ */
+const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+const prog = (p, a, b) => clamp((p - a) / (b - a));
+const easeOut = t => 1 - Math.pow(1 - t, 3);
+const easeOutExpo = t => (t >= 1 ? 1 : 1 - Math.pow(2, -9 * t));
+const easeInOut = t => (t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+
+function rng(seed) {
+  let s = seed >>> 0;
+  return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
+}
+
+const W = 1080, H = 1920;
+const F_HEI = '300 22px "Noto Sans SC"';
+const F_HEI_S = '300 25px "Noto Sans SC"';
+
+const stage = document.getElementById('stage');
+const dom = document.getElementById('dom');
+const cv = document.getElementById('fx');
+const ctx = cv.getContext('2d');
+const hudProgress = document.getElementById('progress');
+const hudIndex = document.getElementById('hud-index');
+const CX = W - 96 * 2;
+
+/* ---- 时间轴 ---- */
+let acc = 0;
+const timeline = STORY.scenes.map((sc, i) => {
+  const start = acc; acc += sc.dur;
+  return { ...sc, i, start, end: acc };
+});
+const DURATION = acc;
+
+/* 供 qa.mjs 读取：每个场景的时间窗与类型 */
+window.__scenes = timeline.map(s => ({
+  i: s.i, type: s.type, start: +s.start.toFixed(3), end: +s.end.toFixed(3), dur: s.dur,
+  fx: s.fx ? s.fx.type : null,
+}));
+
+/* ---- 拆字 ---- */
+function splitChars(str) {
+  const out = [];
+  let inEm = false;
+  for (const token of (str || '').split(/(<em>|<\/em>|\n)/)) {
+    if (token === '<em>') { inEm = true; continue; }
+    if (token === '</em>') { inEm = false; continue; }
+    if (token === '\n') { out.push({ br: true }); continue; }
+    for (const ch of token) out.push({ ch, em: inEm });
+  }
+  return out;
+}
+
+const maxChars = (lines) => Math.max(...(Array.isArray(lines) ? lines : [lines])
+  .map(l => splitChars(l).filter(c => !c.br).length));
+
+/* 按最长行收缩字号，保证不溢出（排版的容量估算） */
+function fitFont(el, lines, maxW, basePx, minPx) {
+  const n = maxChars(lines) || 1;
+  el.style.fontSize = Math.max(minPx, Math.min(basePx, Math.floor(maxW / (n * 1.04)))) + 'px';
+}
+
+function buildTitle(text, cls) {
+  const wrap = document.createElement('div');
+  wrap.className = cls;
+  (Array.isArray(text) ? text : [text]).forEach(line => {
+    const ln = document.createElement('div');
+    ln.className = 'ln';
+    splitChars(line).forEach(c => {
+      if (c.br) { ln.appendChild(document.createElement('br')); return; }
+      const s = document.createElement('span');
+      s.className = 'ch';
+      s.textContent = c.ch === ' ' ? '\u00A0' : c.ch;
+      if (c.em) { const e = document.createElement('em'); e.appendChild(s); ln.appendChild(e); }
+      else ln.appendChild(s);
+    });
+    wrap.appendChild(ln);
+  });
+  return wrap;
+}
+
+function fade(el, k, opt = {}) {
+  if (!el) return;
+  const { dy = 26, blur = 10 } = opt;
+  el.style.opacity = k <= 0 ? 0 : Math.min(1, k);
+  if (dy) el.style.transform = `translateY(${(1 - k) * dy}px)`;
+  if (blur) el.style.filter = k >= 0.995 ? 'none' : `blur(${(1 - k) * blur}px)`;
+}
+
+function fadeChars(el, k0, span = 0.34) {
+  const chars = el.querySelectorAll('.ch');
+  chars.forEach((c, idx) => {
+    const d = chars.length > 1 ? (idx / (chars.length - 1)) * span : 0;
+    const k = clamp((k0 - d) / 0.2);
+    c.style.opacity = k;
+    c.style.transform = `translateY(${(1 - k) * 30}px)`;
+    c.style.filter = k >= 1 ? 'none' : `blur(${(1 - k) * 16}px)`;
+  });
+}
+
+/* ---- 构建 DOM ---- */
+timeline.forEach(sc => {
+  const sec = document.createElement('section');
+  sec.className = 'scene s-' + sc.type;
+
+  if (sc.kicker) {
+    const k = document.createElement('div');
+    k.className = 'kicker';
+    k.innerHTML = `<i></i><span>${sc.kicker}</span>`;
+    sec.appendChild(k);
+  }
+
+  const stack = document.createElement('div');
+  const fxTop = sc.fx && ['grid','curve','flow','bars'].includes(sc.fx.type);
+  stack.className = 'stack' + (sc.type === 'stat' ? ' center' : fxTop ? ' top' : '');
+
+  if (sc.type === 'quote') {
+    const q = document.createElement('div');
+    q.className = 'qmark'; q.textContent = '“';
+    const t = buildTitle(sc.quote, 'qtext');
+    fitFont(t, sc.quote, CX - 8, 76, 42);
+    stack.appendChild(q); stack.appendChild(t);
+    if (sc.cite) {
+      const c = document.createElement('div'); c.className = 'cite'; c.textContent = sc.cite;
+      stack.appendChild(c);
+    }
+  } else if (sc.type === 'stat') {
+    const n = document.createElement('div'); n.className = 'num'; n.textContent = '0';
+    stack.appendChild(n);
+    if (sc.stat.unit) {
+      const u = document.createElement('div'); u.className = 'unit'; u.textContent = sc.stat.unit;
+      stack.appendChild(u);
+    }
+    if (sc.label) {
+      const l = document.createElement('div'); l.className = 'label';
+      l.innerHTML = sc.label.replace(/\n/g, '<br>');
+      stack.appendChild(l);
+    }
+  } else {
+    if (sc.type === 'outro') {
+      const r = document.createElement('div'); r.className = 'rule';
+      stack.appendChild(r);
+    }
+    if (sc.title) {
+      const t = buildTitle(sc.title, 'title');
+      fitFont(t, sc.title, CX, sc.type === 'hook' ? 128 : 118, 56);
+      stack.appendChild(t);
+    }
+    if (sc.body) {
+      const b = document.createElement('div'); b.className = 'body';
+      b.innerHTML = sc.body.replace(/\n/g, '<br>');
+      stack.appendChild(b);
+    }
+    if (sc.cite) {
+      const c = document.createElement('div'); c.className = 'cite'; c.textContent = sc.cite;
+      stack.appendChild(c);
+    }
+  }
+
+  sec.appendChild(stack);
+  dom.appendChild(sec);
+  sc.el = sec;
+});
+
+/* ============================================================
+   ④ Canvas 图形层
+   ============================================================ */
+function glow(x, y, r, rgb, alpha) {
+  const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+  g.addColorStop(0, `rgba(${rgb},${alpha})`);
+  g.addColorStop(1, `rgba(${rgb},0)`);
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+}
+
+const FX = {
+  particles(p, cfg) {
+    const rand = rng(cfg.seed || 7);
+    const n = cfg.n || 60;
+    for (let i = 0; i < n; i++) {
+      const bx = rand() * W, by = rand() * H, r = 1 + rand() * 2.6, sp = 0.4 + rand();
+      const y = (by - p * 130 * sp + H) % H;
+      const a = (0.10 + rand() * 0.32) * (0.30 + 0.70 * Math.sin(p * 5 + i));
+      ctx.globalAlpha = Math.max(0, a);
+      ctx.fillStyle = i % 6 === 0 ? '#5FD0C8' : '#E0A94E';
+      ctx.beginPath(); ctx.arc(bx, y, r, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  },
+
+  grid(p, cfg) {
+    const { cols = 4, rows = 2, cell = 168, gap = 40, highlight = 5 } = cfg;
+    const totalW = cols * cell + (cols - 1) * gap;
+    const totalH = rows * cell + (rows - 1) * gap;
+    const x0 = (W - totalW) / 2;
+    const y0 = H * 0.635 - totalH / 2;
+    const n = cols * rows;
+    const lit = easeInOut(prog(p, 0.05, 0.70)) * n;
+
+    for (let i = 0; i < n; i++) {
+      const c = i % cols, r = Math.floor(i / cols);
+      const x = x0 + c * (cell + gap), y = y0 + r * (cell + gap);
+      const k = clamp(lit - i);
+      if (k <= 0) continue;
+      const isHl = i === highlight;
+      const pulse = isHl ? 0.5 + 0.5 * Math.sin(p * 26) : 0;
+
+      ctx.save();
+      ctx.globalAlpha = k;
+      if (isHl) glow(x + cell / 2, y + cell / 2, cell * 1.4, '224,169,78', 0.16 + 0.14 * pulse);
+
+      ctx.fillStyle = isHl ? `rgba(224,169,78,${0.12 + 0.16 * pulse})` : 'rgba(244,239,230,.045)';
+      ctx.fillRect(x, y, cell, cell);
+      ctx.strokeStyle = isHl ? 'rgba(224,169,78,.95)' : 'rgba(244,239,230,.26)';
+      ctx.lineWidth = isHl ? 2.5 : 1.3;
+      ctx.strokeRect(x, y, cell, cell);
+
+      ctx.fillStyle = isHl ? 'rgba(224,169,78,.9)' : 'rgba(244,239,230,.30)';
+      ctx.font = F_HEI;
+      ctx.textAlign = 'left';
+      ctx.fillText(String(i + 1), x + 16, y + 34);
+      ctx.restore();
+    }
+
+    ctx.save();
+    ctx.globalAlpha = prog(p, 0.68, 0.9) * 0.8;
+    ctx.fillStyle = '#6F695C';
+    ctx.font = F_HEI;
+    ctx.textAlign = 'center';
+    ctx.fillText('8 POSSIBILITIES   ·   log₂ 8 = 3', W / 2, y0 + totalH + 76);
+    ctx.restore();
+  },
+
+  curve(p, cfg) {
+    const kind = cfg.kind || 'entropy';
+    const x0 = 210, x1 = 880;
+    const yBase = H * 0.745, yTop = H * 0.535;
+    const f = u => {
+      if (kind === 'entropy') {
+        const t = clamp(u, 0.004, 0.996);
+        return -(t * Math.log2(t) + (1 - t) * Math.log2(1 - t));
+      }
+      return Math.sin(u * Math.PI);
+    };
+    const k = easeInOut(prog(p, 0.08, 0.76));
+
+    ctx.save();
+    ctx.globalAlpha = prog(p, 0, 0.22) * 0.45;
+    ctx.strokeStyle = 'rgba(244,239,230,.4)';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(x0, yTop); ctx.lineTo(x0, yBase); ctx.lineTo(x1, yBase);
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.save();
+    ctx.beginPath(); ctx.rect(0, 0, x0 + (x1 - x0) * k, H); ctx.clip();
+    ctx.beginPath(); ctx.moveTo(x0, yBase);
+    for (let i = 0; i <= 160; i++) {
+      const u = i / 160;
+      ctx.lineTo(x0 + u * (x1 - x0), yBase - f(u) * (yBase - yTop));
+    }
+    ctx.lineTo(x1, yBase); ctx.closePath();
+    const g = ctx.createLinearGradient(0, yTop, 0, yBase);
+    g.addColorStop(0, 'rgba(224,169,78,.22)');
+    g.addColorStop(1, 'rgba(224,169,78,0)');
+    ctx.fillStyle = g; ctx.fill();
+    ctx.restore();
+
+    ctx.save();
+    ctx.beginPath(); ctx.rect(0, 0, x0 + (x1 - x0) * k, H); ctx.clip();
+    ctx.beginPath();
+    for (let i = 0; i <= 160; i++) {
+      const u = i / 160;
+      const px = x0 + u * (x1 - x0), py = yBase - f(u) * (yBase - yTop);
+      i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+    }
+    ctx.strokeStyle = '#E0A94E';
+    ctx.lineWidth = 3.2;
+    ctx.shadowColor = 'rgba(224,169,78,.6)';
+    ctx.shadowBlur = 22;
+    ctx.stroke();
+    ctx.restore();
+
+    if (k > 0.03) {
+      const u = k, px = x0 + u * (x1 - x0), py = yBase - f(u) * (yBase - yTop);
+      ctx.save();
+      glow(px, py, 90, '224,169,78', .7);
+      ctx.fillStyle = '#F4EFE6';
+      ctx.beginPath(); ctx.arc(px, py, 8, 0, Math.PI * 2); ctx.fill();
+
+      ctx.strokeStyle = 'rgba(244,239,230,.22)';
+      ctx.setLineDash([5, 9]); ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px, yBase); ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.fillStyle = '#B4AC9C';
+      ctx.font = F_HEI;
+      ctx.textAlign = 'center';
+      ctx.fillText('p ' + u.toFixed(2), px, yBase + 40);
+      ctx.textAlign = 'left';
+      ctx.fillText('H ' + f(u).toFixed(2), px + 24, py - 18);
+      ctx.restore();
+    }
+
+    ctx.save();
+    ctx.globalAlpha = prog(p, 0.45, 0.78) * .85;
+    ctx.fillStyle = '#6F695C';
+    ctx.font = F_HEI;
+    ctx.textAlign = 'center';
+    ctx.fillText('发生概率 p', (x0 + x1) / 2, yBase + 92);
+    ctx.translate(x0 - 74, (yBase + yTop) / 2); ctx.rotate(-Math.PI / 2);
+    ctx.fillText('信息量 H(p)', 0, 0);
+    ctx.restore();
+  },
+
+  flow(p) {
+    const nodes = [
+      { x: 300, y: H * 0.575, label: '你的点击' },
+      { x: 800, y: H * 0.515, label: '推荐模型' },
+      { x: 800, y: H * 0.665, label: '同类内容' },
+      { x: 300, y: H * 0.725, label: '又一条' },
+    ];
+    const edges = [[0, 1], [1, 2], [2, 3], [3, 1]];
+    const k = easeInOut(prog(p, 0.06, 0.70));
+
+    edges.forEach(([a, b], idx) => {
+      const e0 = prog(k, idx * 0.17, idx * 0.17 + 0.40);
+      if (e0 <= 0) return;
+      const A = nodes[a], B = nodes[b];
+      const mx = (A.x + B.x) / 2, my = (A.y + B.y) / 2;
+      const bend = 80 * (idx % 2 ? 1 : -1);
+      ctx.save();
+      ctx.globalAlpha = 0.9;
+      ctx.strokeStyle = idx === 3 ? 'rgba(95,208,200,.7)' : 'rgba(224,169,78,.5)';
+      ctx.lineWidth = 1.8;
+      ctx.setLineDash([9, 11]);
+      ctx.lineDashOffset = -p * 300;
+      const steps = 60, lim = Math.max(1, Math.floor(steps * e0));
+      ctx.beginPath();
+      for (let i = 0; i <= lim; i++) {
+        const t = i / steps;
+        const x = (1 - t) * (1 - t) * A.x + 2 * (1 - t) * t * (mx + bend) + t * t * B.x;
+        const y = (1 - t) * (1 - t) * A.y + 2 * (1 - t) * t * my + t * t * B.y;
+        i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+      }
+      ctx.stroke();
+      ctx.restore();
+    });
+
+    nodes.forEach((n, i) => {
+      const kk = clamp(prog(p, 0.02 + i * 0.09, 0.18 + i * 0.09));
+      if (kk <= 0) return;
+      ctx.save();
+      ctx.globalAlpha = kk;
+      glow(n.x, n.y, 120, '224,169,78', .30 * kk);
+      ctx.fillStyle = '#07080B';
+      ctx.beginPath(); ctx.arc(n.x, n.y, 15, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = i === 0 ? '#5FD0C8' : '#E0A94E';
+      ctx.lineWidth = 2.4;
+      ctx.beginPath(); ctx.arc(n.x, n.y, 15, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = '#B4AC9C';
+      ctx.font = F_HEI_S;
+      ctx.textAlign = 'center';
+      ctx.fillText(n.label, n.x, n.y + 64);
+      ctx.restore();
+    });
+  },
+
+  bars(p, cfg) {
+    const n = cfg.n || 15;
+    const bw = 46, gap = 12;
+    const totalW = n * bw + (n - 1) * gap;
+    const x0 = (W - totalW) / 2, base = H * 0.755;
+    const maxH = H * 0.195;
+    const k = easeOut(prog(p, 0.05, 0.72));
+    const vals = Array.from({ length: n }, (_, i) =>
+      Math.exp(-Math.pow((((i + .5) / n) - .5) / 0.16, 2)));
+
+    vals.forEach((v, i) => {
+      const kk = clamp(k * 1.6 - i * 0.03);
+      const h = v * maxH * easeOut(kk);
+      const x = x0 + i * (bw + gap);
+      ctx.save();
+      ctx.globalAlpha = kk;
+      const g = ctx.createLinearGradient(0, base - h, 0, base);
+      g.addColorStop(0, 'rgba(224,169,78,.85)');
+      g.addColorStop(1, 'rgba(224,169,78,.08)');
+      ctx.fillStyle = g;
+      ctx.fillRect(x, base - h, bw, h);
+      ctx.strokeStyle = 'rgba(224,169,78,.45)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x, base - h, bw, h);
+      ctx.restore();
+    });
+  },
+};
+
+/* ============================================================
+   ⑤ seek(t)：纯函数，t ∈ [0,1]
+   ============================================================ */
+function renderAt(t) {
+  const time = t * DURATION;
+
+  let active = timeline[timeline.length - 1];
+  for (const sc of timeline) if (time < sc.end) { active = sc; break; }
+  const p = clamp((time - active.start) / active.dur);
+
+  const vis = Math.min(prog(p, 0, 0.055), 1 - prog(p, 0.94, 1));
+
+  for (const sc of timeline) {
+    const isOn = sc === active;
+    sc.el.classList.toggle('on', isOn);
+    sc.el.style.opacity = isOn ? vis : 0;
+    sc.el.style.transform = isOn ? `scale(${1 + (1 - vis) * 0.006})` : 'none';
+  }
+
+  const el = active.el;
+  fade(el.querySelector('.kicker'), prog(p, 0.0, 0.12), { dy: 16, blur: 8 });
+
+  if (active.type === 'stat') {
+    const num = el.querySelector('.num');
+    const k = easeOutExpo(prog(p, 0.10, 0.60));
+    num.textContent = (active.stat.from + (active.stat.to - active.stat.from) * k)
+      .toFixed(active.stat.decimals ?? 0);
+    num.style.opacity = prog(p, 0.08, 0.24);
+    fade(el.querySelector('.unit'), prog(p, 0.42, 0.60), { dy: 14, blur: 6 });
+    fade(el.querySelector('.label'), prog(p, 0.56, 0.76), { dy: 22, blur: 8 });
+  } else {
+    const title = el.querySelector('.title, .qtext');
+    if (title) { title.style.opacity = 1; fadeChars(title, prog(p, 0.03, 0.34)); }
+    fade(el.querySelector('.qmark'), prog(p, 0.0, 0.15), { dy: 0, blur: 12 });
+    fade(el.querySelector('.body'), prog(p, 0.30, 0.50), { dy: 24, blur: 10 });
+    fade(el.querySelector('.cite'), prog(p, 0.58, 0.76), { dy: 14, blur: 6 });
+    const rule = el.querySelector('.rule');
+    if (rule) rule.style.width = (prog(p, 0.02, 0.42) * 200) + 'px';
+  }
+
+  ctx.clearRect(0, 0, W, H);
+  if (active.fx && FX[active.fx.type]) {
+    ctx.save();
+    ctx.globalAlpha = vis;
+    FX[active.fx.type](p, active.fx);
+    ctx.restore();
+  }
+
+  hudProgress.style.width = (t * 100) + '%';
+  const num = String((STORY.meta.startIndex || 1) + active.i).padStart(2, '0');
+  if (hudIndex.textContent !== num) hudIndex.textContent = num;
+}
+
+/* ============================================================
+   ⑥ 启动
+   ============================================================ */
+function makeGrain() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 220;
+  const g = c.getContext('2d');
+  const img = g.createImageData(220, 220);
+  const rand = rng(20261018);
+  for (let i = 0; i < img.data.length; i += 4) {
+    const v = 90 + rand() * 130;
+    img.data[i] = img.data[i + 1] = img.data[i + 2] = v;
+    img.data[i + 3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+  document.getElementById('grain').style.backgroundImage = `url(${c.toDataURL()})`;
+}
+
+function fit() {
+  const s = Math.min(window.innerWidth / W, window.innerHeight / H);
+  stage.style.transform = `translate(-50%,-50%) scale(${s})`;
+}
+window.addEventListener('resize', fit);
+
+document.getElementById('hud-series').textContent = STORY.meta.series || '';
+document.getElementById('hud-handle').textContent = STORY.meta.handle || '';
+makeGrain(); fit();
+window.seek = (t) => { renderAt(clamp(t)); return true; };
+
+(async () => {
+  try {
+    // 内嵌字体必须显式等三款字重全部就绪，否则首帧会用回退字形渲染
+    await Promise.all([
+      document.fonts.load('500 40px "LXGW WenKai GB"'),
+      document.fonts.load('300 40px "Noto Sans SC"'),
+      document.fonts.load('500 40px "Noto Sans SC"'),
+    ]);
+    await document.fonts.ready;
+
+    const missing = [];
+    if (!document.fonts.check('500 40px "LXGW WenKai GB"')) missing.push('LXGW WenKai GB 500');
+    if (!document.fonts.check('300 40px "Noto Sans SC"')) missing.push('Noto Sans SC 300');
+    if (!document.fonts.check('500 40px "Noto Sans SC"')) missing.push('Noto Sans SC 500');
+    window.__fonts = missing;
+
+    renderAt(0);
+    window.__duration = DURATION;
+    window.__ready = true;
+    if (missing.length) console.warn('[vibe] 字体缺失：' + missing.join(' / '));
+  } catch (e) {
+    window.__error = String((e && e.stack) || e);
+  }
+})();
+</script>
+</body>
+</html>

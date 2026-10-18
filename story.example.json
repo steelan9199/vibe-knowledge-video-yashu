@@ -1,0 +1,64 @@
+{
+  "meta": {
+    "series": "INFORMATION THEORY",
+    "handle": "@你的账号",
+    "startIndex": 1
+  },
+  "scenes": [
+    {
+      "type": "hook",
+      "dur": 4.5,
+      "kicker": "信息论 · 第一讲",
+      "title": ["你刷到的每一条", "都是<em>猜不到</em>的"],
+      "body": "信息量的大小，\n和你说了多少字无关。",
+      "fx": { "type": "particles", "n": 70, "seed": 11 }
+    },
+    {
+      "type": "quote",
+      "dur": 6.5,
+      "kicker": "CLAUDE SHANNON · 1948",
+      "quote": "信息的多少，不取决于你\n说了什么，而取决于对方\n<em>猜不到</em>什么。",
+      "cite": "《通信的数学理论》"
+    },
+    {
+      "type": "scene",
+      "dur": 7.0,
+      "kicker": "SETUP",
+      "title": ["八个格子", "藏一个数字"],
+      "body": "我心里想 1 到 8 的一个数。\n每问一次是非题，排除一半。",
+      "fx": { "type": "grid", "cols": 4, "rows": 2, "cell": 168, "gap": 40, "highlight": 5 }
+    },
+    {
+      "type": "stat",
+      "dur": 6.0,
+      "kicker": "ENTROPY",
+      "stat": { "from": 0, "to": 3, "decimals": 0, "unit": "BITS" },
+      "label": "八个等可能的答案，猜中它\n需要的信息量，正好 3 比特。"
+    },
+    {
+      "type": "scene",
+      "dur": 8.0,
+      "kicker": "THE CURVE",
+      "title": ["越确定", "越没有信息"],
+      "body": "一件事发生的概率越高，\n它告诉你的事情就越少。",
+      "fx": { "type": "curve", "kind": "entropy" }
+    },
+    {
+      "type": "scene",
+      "dur": 7.5,
+      "kicker": "THE FEED",
+      "title": ["算法喂给你的", "是你已经知道的"],
+      "body": "推荐越准，你收到的\n新信息，越趋近于零。",
+      "fx": { "type": "flow" }
+    },
+    {
+      "type": "outro",
+      "dur": 6.0,
+      "kicker": "SO",
+      "title": ["真正的信息", "总带着一点<em>意外</em>"],
+      "body": "去看不懂的书，\n见想法不同的人。",
+      "cite": "SHANNON ENTROPY",
+      "fx": { "type": "particles", "n": 40, "seed": 5 }
+    }
+  ]
+}
