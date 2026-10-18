@@ -145,9 +145,12 @@ if (VIDEO_ONLY) {
   for (const h of await blackDetect(VIDEO)) {
     add('err', 'black-frame', '-', `${h.start.toFixed(2)}s 起黑屏 ${h.dur.toFixed(2)}s`, '该屏进场淡入太快，或 fx 未绘制');
   }
+  for (const f of await flashDetect(VIDEO)) {
+    add('err', 'flash-frame', '-', `${f.at.toFixed(2)}s 起连续 ${f.frames} 帧画面突变（帧差 ${f.peak.toFixed(1)}）`, '截图残帧：render.mjs 每帧等待不足，或浏览器返回了低分辨率平铺');
+  }
   const hits = S.filter(x => x.sev === 'err');
   hits.forEach(x => console.log(`  错误 ${x.type.padEnd(12)} ${x.detail}  → ${x.fix}`));
-  console.log(`[qa] 成片终检：${hits.length ? `${hits.length} 处黑屏，未通过` : '无黑屏，通过'}`);
+  console.log(`[qa] 成片终检：${hits.length ? `${hits.length} 处问题，未通过` : '无黑屏、无闪帧，通过'}`);
   process.exit(hits.length ? 1 : 0);
 }
 
@@ -231,6 +234,67 @@ function blackDetect(file) {
       resolve(hits.filter(h => h.start > 0.15)); // 开场渐入不算
     });
     p.on('error', () => resolve([]));
+  });
+}
+
+// ---------------------------------------------------------------- 闪帧检测
+/**
+ * 逐帧与上一帧做差（tblend=difference + signalstats），抓「插进来又走了」的残帧。
+ * 正常一次转场只在 1 帧上突变（单峰）；残帧则是两处突变把不速之客夹在中间：
+ *   • 1 帧残帧        → 帧差 H,H（进也突变、出也突变）
+ *   • 连续 2 帧（相同）→ H,L,H（两帧一样，中间那次差是 0）
+ * 这类帧肉眼要拖回去逐帧播才看得见，所以必须机器查。
+ */
+function flashDetect(file, fps = 30) {
+  return new Promise((resolve) => {
+    mkdtemp(path.join(tmpdir(), 'qa-flash-')).then((dir) => {
+      // 输出用相对文件名：Windows 盘符里的 ":" 会被 ffmpeg 的滤镜参数解析成分隔符
+      const p = spawn('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-i', file, '-vf',
+        'tblend=all_mode=difference,signalstats,metadata=print:file=stats.txt',
+        '-an', '-f', 'null', '-'], { stdio: ['ignore', 'ignore', 'ignore'], windowsHide: true, cwd: dir });
+      p.on('error', () => resolve([]));
+      p.on('close', async () => {
+        const meta = path.join(dir, 'stats.txt');
+        const txt = existsSync(meta) ? await readFile(meta, 'utf8').catch(() => '') : '';
+        await rm(dir, { recursive: true, force: true }).catch(() => {});
+        // signalstats 会把接近 0 的值写成 8.68e-05，正则必须吃科学计数法，
+        // 否则 8.68e-05 被截成 8.68，静止画面会被误判成闪帧（踩过）
+        const vals = [...txt.matchAll(/lavfi\.signalstats\.YAVG=([0-9.eE+-]+)/g)].map(m => Number(m[1]));
+        if (vals.length < 5) return resolve([]);
+        const sorted = [...vals].sort((a, b) => a - b);
+        const median = sorted[Math.floor(sorted.length / 2)];
+        const thr = Math.max(6, median * 15);   // 相对阈值：不看绝对亮度，只看"比别人突变得多"
+        const hot = vals.map(v => v > thr);
+        const quiet = (i) => i < 0 || i >= vals.length || vals[i] < thr / 2;
+
+        // 正常转场只在某帧"变一次"（单峰）。闪帧是「插进来的画面又走了」，所以一定有**两处**突变：
+        //   1 帧残帧：帧差 H,H（进也突变、出也突变）
+        //   2 帧相同残帧：H,L,H（两帧彼此一样，所以中间那次差是 0）
+        // 因此判据不是"连续高"，而是"两处突变把 △ 帧包住，且前后都平静"。
+        const runs = [];
+        const push = (frame, frames, peak) => runs.push({ at: frame / fps, frames, peak });
+        let i = 0;
+        while (i < vals.length) {
+          if (!hot[i]) { i++; continue; }
+          let j = i;
+          while (j + 1 < vals.length && hot[j + 1]) j++;
+          const len = j - i + 1;                 // 连续突变的个数
+          const beforeQuiet = quiet(i - 1);
+          const afterQuiet = quiet(j + 1);
+
+          if (len >= 2 && beforeQuiet && afterQuiet) {
+            // 进也突变、出也突变，中间还在一起变 → 插进来的残帧
+            push(i + 1, len, Math.max(...vals.slice(i, j + 1)));
+          } else if (len === 1 && beforeQuiet && hot[j + 2] && quiet(j + 3)) {
+            // 单突变 → 平静 1 帧 → 再突变：两帧完全相同的残帧（中间那次差是 0）
+            push(i + 1, 2, Math.max(vals[i], vals[j + 2]));
+            i = j + 2; continue;
+          }
+          i = j + 1;
+        }
+        resolve(runs);
+      });
+    });
   });
 }
 
@@ -345,8 +409,12 @@ try {
 
   if (VIDEO) {
     if (!existsSync(VIDEO)) add('warn', 'video-missing', '-', `找不到 ${VIDEO}`, '先出片再测黑屏');
-    else (await blackDetect(VIDEO)).forEach(h =>
-      add('err', 'black-frame', '-', `${h.start.toFixed(2)}s 处黑屏 ${h.dur.toFixed(2)}s`, '场景进场淡入太快或 fx 未绘制，检查 vis 区间'));
+    else {
+      (await blackDetect(VIDEO)).forEach(h =>
+        add('err', 'black-frame', '-', `${h.start.toFixed(2)}s 处黑屏 ${h.dur.toFixed(2)}s`, '场景进场淡入太快或 fx 未绘制，检查 vis 区间'));
+      (await flashDetect(VIDEO)).forEach(f =>
+        add('err', 'flash-frame', '-', `${f.at.toFixed(2)}s 起连续 ${f.frames} 帧画面突变（帧差 ${f.peak.toFixed(1)}）`, '截图残帧：render.mjs 每帧等待不足'));
+    }
   }
 
   await cdp.send('Browser.close').catch(() => {});

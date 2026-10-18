@@ -192,6 +192,7 @@ async function waitForPort(portFile, timeoutMs = 20000) {
     '--disable-renderer-backgrounding',
     '--force-device-scale-factor=1',
     '--font-render-hinting=none',
+    '--disable-partial-raster',
     '--run-all-compositor-stages-before-draw',
     '--disable-new-content-rendering-timeout',
     'about:blank',
@@ -261,25 +262,43 @@ async function waitForPort(portFile, timeoutMs = 20000) {
     log(`[render] ${WIDTH}x${HEIGHT} · ${FPS}fps · ${duration.toFixed(2)}s · ${captureCount} 帧`);
 
     // 6) 逐帧截图
+    //    两次 rAF 只保证样式算完，不保证这一帧已经**光栅化到屏幕上**。
+    //    Chrome 偶尔会在图层仍在 raster 时把整帧截成低分辨率平铺（画面像被缩小平铺 8 份），
+    //    成片里就是"闪一下别的画面"。等足一个帧间隔再截，这一帧才算真的画完。
+    const SETTLE_MS = Number(args.settle || 40);
     const seekExpr = (t) => `(async () => {
       window.seek(${t});
       await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+      await new Promise(r => setTimeout(r, ${SETTLE_MS}));
       return true;
     })()`;
 
     const t0 = Date.now();
+    const sizes = [];   // 近 30 帧的 PNG 体积，用于识别"被压扁的低分辨率残帧"
+    const grab = () => cdp.send('Page.captureScreenshot', {
+      format: FORMAT === 'jpeg' ? 'jpeg' : 'png',
+      ...(FORMAT === 'jpeg' ? { quality: Number(args.quality || 95) } : {}),
+      fromSurface: true,
+      captureBeyondViewport: false,
+    }, sessionId);
+
     for (let i = 0; i < totalFrames; i += step) {
       const t = totalFrames === 1 ? 0 : i / (totalFrames - 1);
       await cdp.send('Runtime.evaluate', {
         expression: seekExpr(t.toFixed(6)), awaitPromise: true, returnByValue: true,
       }, sessionId);
 
-      const shot = await cdp.send('Page.captureScreenshot', {
-        format: FORMAT === 'jpeg' ? 'jpeg' : 'png',
-        ...(FORMAT === 'jpeg' ? { quality: Number(args.quality || 95) } : {}),
-        fromSurface: true,
-        captureBeyondViewport: false,
-      }, sessionId);
+      let shot = await grab();
+      // 兜底：突变帧的 PNG 会明显小于邻帧（整屏变成了放大的低分辨率色块）→ 多等一帧重截
+      if (sizes.length >= 5) {
+        const med = [...sizes].sort((a, b) => a - b)[Math.floor(sizes.length / 2)];
+        if (shot.data.length < med * 0.55) {
+          await sleep(90);
+          shot = await grab();
+        }
+      }
+      sizes.push(shot.data.length);
+      if (sizes.length > 30) sizes.shift();
 
       const idx = String(i / step + 1).padStart(5, '0');
       await writeFile(path.join(framesDir, `f_${idx}.${FORMAT === 'jpeg' ? 'jpg' : 'png'}`), Buffer.from(shot.data, 'base64'));
