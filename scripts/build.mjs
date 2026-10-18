@@ -208,14 +208,17 @@ function snapToOnsets(scenes, beats) {
       .filter(p => p >= lo && p <= hi && Math.abs(p - want) <= WINDOW)
       .sort((x, y) => Math.abs(x - want) - Math.abs(y - want))[0];
     // 优先落在重拍（底鼓）上，找不到再退到普通击打
-    return near(strong) ?? near(onsets) ?? want;
+    const s = near(strong), o = s == null ? near(onsets) : null;
+    const t = s ?? o;
+    return { t: t ?? want, onBeat: t != null };
   };
 
-  let t = 0, moved = 0, maxShift = 0;
+  let t = 0, moved = 0, aligned = 0, maxShift = 0;
   const ideal = scenes.map(s => Number(s.dur) || 6);
   for (let i = 0; i < scenes.length - 1; i++) {
     const want = t + ideal[i];
-    const hit = pick(want, t + DUR.min, t + DUR.max);
+    const { t: hit, onBeat } = pick(want, t + DUR.min, t + DUR.max);
+    if (onBeat) aligned++;
     const shift = Math.abs(hit - want);
     if (shift > 0.02) moved++;
     maxShift = Math.max(maxShift, shift);
@@ -225,7 +228,7 @@ function snapToOnsets(scenes, beats) {
   scenes[scenes.length - 1].dur = +Math.max(DUR.min,
     Math.min(DUR.max, ideal[scenes.length - 1])).toFixed(2);
 
-  return { bpm: beats.bpm, moved, maxShift: +maxShift.toFixed(2), onsets: onsets.length };
+  return { bpm: beats.bpm, aligned, cuts: scenes.length - 1, moved, maxShift: +maxShift.toFixed(2), onsets: onsets.length };
 }
 
 // ---------------------------------------------------------------- 注入
@@ -303,7 +306,13 @@ if (!NO_BEAT) {
 
     beatInfo = snapToOnsets(story.scenes, beatData);
     if (beatInfo && !QUIET) {
-      console.error(`[build] 卡点：BPM ${beatInfo.bpm} · ${beatInfo.moved}/${story.scenes.length} 处切屏对齐击打 · 最大位移 ${beatInfo.maxShift}s`);
+      const { aligned, cuts, moved, maxShift } = beatInfo;
+      console.error(`[build] 卡点：BPM ${beatInfo.bpm} · ${aligned}/${cuts} 个切点落在击打上`
+        + `（${moved} 处微调，最大位移 ${maxShift}s）`);
+      if (aligned < cuts) {
+        console.error(`[build] 警告：有 ${cuts - aligned} 个切点 ±0.5s 内找不到击打，只能硬切。`
+          + `把该屏 dur 调成 4.25 / 2.83 这类 8.5s 的整数分之一`);
+      }
     }
   } catch (e) {
     if (!QUIET) console.error(`[build] 跳过卡点：${e.message}（跑 scripts/beat.mjs 生成 assets/beats.json）`);

@@ -1,7 +1,7 @@
 ---
 name: vibe-knowledge-video-yashu
 description: 把一段文案做成抖音「vibe 知识大赏」风格的竖屏知识视频（1080x1920 MP4）。用户给出文案、观点或选题，输出可直接发布的知识短视频。触发词：vibe知识、知识大赏、知识视频、把这段文案做成视频、竖屏知识视频、生成知识短视频、文案转视频。
-version: 1.6.0
+version: 1.6.1
 ---
 
 # Vibe 知识视频生成器
@@ -131,37 +131,30 @@ node scripts/run.mjs --story story.json --sheet out/sheet.png
 > **配乐是固定的那首神曲，卡点已经测完并存成档案了 → `references/beat-map-vibe.md`**
 >
 > 关键数字：**112.91 BPM** · 一拍 **0.53142s** · 16 拍一圈 **8.503s** · 首拍 **0.059s** · 301 个拍点 / 19 个圈头。
-> **不要重跑分析、不要自己用公式推拍点、不要相信任何 96 BPM 或 40ms 偏移的旧结论。**
+> **不要重跑分析，不要自己用公式推拍点。**
 > 排片时长取 8.5s 的 1/1、1/2、1/3、1/4，切点自然落圈头。
 > 查具体时间点：`node scripts/beats-info.mjs --at 12.34`
 
 ```
 assets/bgm/vibe.mp3   （神曲，160s）
-        ↓ scripts/beat.mjs        周期 × 相位二维拟合（换歌才跑）
+        ↓ scripts/refine-beats.py   librosa DP + 抛物线插值（换歌才跑）
 assets/beats.json     { bpm, period, phase, onsets[301], strong[19], audioMd5 }
-        ↓ scripts/build.mjs       把每个切点推到最近的击打上（±0.5s 内）
-story.json 的 dur    → 实际时长被微调，输出里会打印"n/7 处切屏对齐击打"
-        ↓ scripts/inject          同时把 onsets 注入 window.__BEATS__
-        ↓ scripts/render.mjs      -stream_loop -1 铺满全片 + 结尾 1.2s 淡出
+        ↓ scripts/build.mjs         把每个切点推到最近的击打上（±0.5s 内）
+story.json 的 dur    → 实际时长被微调，输出会打印"切点全部落在击打上 + 几处需微调"
+        ↓ scripts/inject            同时把 onsets 注入 window.__BEATS__
+        ↓ scripts/render.mjs        -stream_loop -1 铺满全片 + 结尾 1.2s 淡出
 out/final.mp4
 ```
 
 `beats.json` 带音频 MD5 指纹：mp3 被换过时 `build.mjs` 会打警告、`beats-info.mjs --check` 退出码 1，
 不会拿旧卡点配新音频。
 
-**beat.mjs 只做一件事：找拍长和相位，不找"能量峰"。**
+**卡点表的唯一来源是 `refine-beats.py`（librosa DP + 抛物线插值）。**
 
-| v1 的错（v2 之前） | v2 的做法 |
-|---|---|
-| 挑能量峰，拿峰间隔的中位数当 BPM | 自相关只给候选，period × phase 二维精扫定拍 |
-| 峰不规律 → BPM 是假的 | 输出 `ratio`（网格点 ÷ 半拍强度），<1.25 直接判"无可用节拍" |
-| `MIN_GAP=0.22s` 允许 272BPM 双触发 | 拍长锁在 80–150BPM，网格点吸附 ±25ms 到真实音头 |
-
-实测两轮修正：v1 测成 **96 BPM**（实际 112.9），差 17%，第 20 拍起就错位半个拍子；
-v2 的 BPM 对了，但整表相位**早约 40ms**（一帧 33ms），因为它的包络按"帧起始"对齐、
-且拿它自己吸附自己，属于循环验证。v3 用 librosa 的 DP 跟踪定周期相位、
-再抛物线插值吸到起音峰，峰位 **0ms**、峰背比 3.63→**5.53**、网格抖动 15→**5.8ms**。
-详见 `references/beat-map-vibe.md` 第 3 节。
+- `beat.mjs` 是纯 Node 兜底：找拍长和相位不找"能量峰"，输出 `ratio`（<1.25 判"无可用节拍"），
+  **但它的包络按帧起始对齐，整表相位早 20–40ms，不能直接出片**。
+- 换歌/换母带后先跑 `refine-beats.py`，看它打印的**峰位≈0ms、峰背比≥2.5** 再往下走。
+- 指标口径与验收方法见 `references/beat-map-vibe.md` 第 3 节。
 
 **每拍都要有视觉事件（`__BEATS__`）**
 
@@ -175,45 +168,25 @@ build 会把击打点注入模板，`#beatcv` 那一层按时间戳画：
 
 **这是让卡点可被肉眼验证的机制**：音乐每响一下，画面必动一下。没有这一层，"卡点准不准"只能靠感觉。
 
-**参数**
+配乐相关参数只有三个：`--bgm none` / `--bgm 别的歌.mp3` / `--no-beat`，其余见 §3。
 
-| 参数 | 作用 |
-|---|---|
-| `--bgm none` | 不要配乐（纯静音轨） |
-| `--bgm 别的歌.mp3` | 换配乐，**同时要重跑 `beat.mjs`** |
-| `--beats x.json` | 指定击打点表（默认 `assets/beats.json`） |
-| `--no-beat` | 保留配乐但不卡点，也不注入节拍层 |
-| `--draft` | 2fps 试片，30 秒出结果 |
-| `--settle 40` | 每帧截图前等待毫秒数。**调小会闪帧**，机器过载调到 70 |
-
-**换歌三步**
+**换歌两步**
 
 ```bash
 cp 新歌.mp3 assets/bgm/
-node scripts/beat.mjs --audio assets/bgm/新歌.mp3 --out assets/beats.json --strong-every 16
-node scripts/beats-info.mjs                       # 看 BPM / 循环长度 / 指纹 ok
-
-# 要精度（推荐）：用 librosa 重算一遍，峰位会从 +40ms 收到 0ms
-.venv/Scripts/python.exe scripts/refine-beats.py \
-    --audio assets/bgm/新歌.mp3 --out assets/beats.json
+uv venv --python 3.12 .venv && uv pip install --python .venv librosa soundfile   # 只需一次
+.venv/Scripts/python.exe scripts/refine-beats.py --audio assets/bgm/新歌.mp3 --out assets/beats.json
 ```
 
-跑完先看 `ratio` 和 `confidence`。**`confidence: low` 就别硬卡**——这条音频没有可用的节拍，
-换成"每屏落在整秒"或换歌，比假装卡点强。确认可用后，把 BPM、循环长度、圈头表
-更新进 `references/beat-map-vibe.md`，下次就又能直接查表。
+跑完看它打印的**峰位≈0ms、峰背比≥2.5**。达不到就别硬卡：这条音频没有可用节拍，
+改成"每屏落在整秒"，或用 `scripts/make-drum-track.mjs` 造一条鼓点真值已知的基准轨，
+用它做基准，而不是猜。确认可用后把 BPM、循环长度、圈头表更新进
+`references/beat-map-vibe.md`，下次就又能直接查表。
 
-**配乐没有鼓怎么办**
-
-用 `scripts/verify-beats.mjs` 先体检，它会把三件事量出来：拟合 BPM / 网格对比度 /
-每 20 秒的低频律动强度。如果确认无节拍，用 `scripts/make-drum-track.mjs` 合成一条
-"鼓点真值已知"的基准轨（96BPM four-on-the-floor，鼓点时间精确到采样点），
-用它做卡点基准，而不是猜。
-
-**注意 `assets/bgm/vibe.mp3` 的身份**：它的容器元数据里带 `comment: vid:...`、
-`major_brand: isom`——这是**从抖音视频里抽出来的音轨**，不是音乐平台的原曲。
-它的节拍是真实的（112.98 BPM），但混响极重、段落起伏大，`ratio` 只有 1.42。
-不要因为它"听起来糊"就断定没有鼓：24 秒压成一张波形图，任何鼓都会被糊成噪声墙，
-**必须放大到 2 秒看频谱**。
+**默认配乐 `vibe.mp3` 的身份**：容器里带 `comment: vid:...`、`major_brand: isom`，
+是**从抖音视频抽出来的音轨**，混响极重，`ratio` 只有 1.46——但节拍是真实的。
+不要因为它"听起来糊"就断定没有鼓：判断有没有鼓**至少放大到 2 秒看频谱**，
+整段压成一张波形图会把瞬态糊成噪声墙。
 
 
 ## 5. qa 不通过时怎么改
@@ -257,8 +230,8 @@ qa 的输出是**聚合后**的，同类问题一行，直接照做：
 |---|---|---|
 | `scripts/run.mjs` | 一键流水线，串起 build→qa→render→终检 | 基本不动 |
 | `scripts/build.mjs` | 容量校验 + 卡点 + 把 story 注入模板 | 只改文案时不动 |
-| `scripts/beat.mjs` | 分析配乐，产出击打点表（周期×相位拟合，纯 Node 零依赖） | 只有换歌时才跑；相位会早 20–40ms，要精度改用下面那个 |
-| `scripts/refine-beats.py` | **精度模式**：librosa DP 定周期相位 + 抛物线插值吸附，峰位可到 0ms | 换歌 / 换母带 / 要求更准时 |
+| `scripts/refine-beats.py` | **卡点表唯一来源**：librosa DP 定周期相位 + 抛物线插值吸附，峰位 0ms | 换歌 / 换母带 / 重测时 |
+| `scripts/beat.mjs` | 纯 Node 零依赖兜底：周期×相位拟合，相位早 20–40ms | 没有 Python 环境时临时用，不作最终表 |
 | `scripts/beats-info.mjs` | 读已缓存的卡点表：概要 / `--at` 查拍 / `--snap` 对齐 / `--check` 指纹 | 排片期随时可用，不耗 CPU |
 | `scripts/verify-beats.mjs` | 独立校验节拍表：三频段分离 + 网格拟合 + 鼓组证据 | 怀疑卡点不准 / 换新配乐时先跑它 |
 | `scripts/make-drum-track.mjs` | 合成"鼓点真值已知"的基准音轨（96BPM） | 配乐没有可用节拍时 |
@@ -269,7 +242,7 @@ qa 的输出是**聚合后**的，同类问题一行，直接照做：
 | `assets/template.html` | 1080×1920 分镜模板（唯一视觉来源） | 只有换整片风格才动 |
 | `assets/fonts/` | 三份子集化字体 | 不要动 |
 | `assets/bgm/vibe.mp3` | 配乐神曲，默认启用 | 换歌时替换 |
-| `assets/beats.json` | 击打点时间表 + 音频指纹，卡点依据 | 由 `beat.mjs` 生成，不手改 |
+| `assets/beats.json` | 卡点真值 + 音频指纹，卡点依据 | 由 `refine-beats.py` 生成，不手改 |
 | `references/beat-map-vibe.md` | **曲目卡点档案**：BPM / 拍点表 / 圈头表 / 时长换算 / 禁忌 | 换歌或重测后同步更新 |
 | `references/learnings.md` | 经验日志，沉淀还没变成规则的东西 | 随 `learn.mjs` 自动写 |
 | `story.example.json` | 可直接改的样例 | 参考用 |
@@ -314,6 +287,13 @@ qa 的输出是**聚合后**的，同类问题一行，直接照做：
 - 是**新方法** → 落成脚本参数或模板能力，写进 §5 或 `design-system.md`，不要只写在日志里。
 
 **只记不改等于没沉淀。** 日志里每一条的"改动"栏必须是具体文件名 + 改法。
+
+**文档只写"现在正确的事实"。** 被推翻的结论、失败尝试、版本沿革、"以前测成 X 后来改成 Y"
+一律**直接删掉**（git log 里有的是），不要留在 SKILL.md / references 里占篇幅——它们会让下一个
+读文档的人把错的当对的。唯一例外：**如果重犯这个错会导致静默、难发现、返工大的后果**，
+就留**一句**"这样做会错"的操作警告，不带数字对比、不带历史（例：`beat.mjs` 的相位早 20–40ms）。
+删错数据和删错结论要同步做：既然结论错了，`assets/` 里对应的错数据文件也一起删，
+否则它迟早被当成基准。
 
 ### 第三步：记一条，必要时升级
 
