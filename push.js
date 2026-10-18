@@ -6,6 +6,16 @@ const message =
 // 主逻辑封装为 async 函数
 async function main() {
   try {
+    // 只允许在 main 上推送：这个仓库只有 main + tag，不保留其他分支
+    const branch = runGit(["rev-parse", "--abbrev-ref", "HEAD"]).trim();
+    if (branch !== "main") {
+      console.error(
+        `\x1b[31m当前分支是 ${branch || "(游离 HEAD)"}，本仓库只推 main。\x1b[0m\n` +
+          `先执行：git switch main`,
+      );
+      process.exit(1);
+    }
+
     // Check for changes
     console.log("\x1b[36mChecking Git status...\x1b[0m");
     const status = runGit(["status", "--porcelain"]);
@@ -23,9 +33,9 @@ async function main() {
       console.log("\x1b[32mNo changes to commit\x1b[0m");
     }
 
-    // Push（-u 兼容首次推送时没有 upstream 的分支）
-    console.log("\x1b[36mPushing to GitHub...\x1b[0m");
-    runGit(["push", "-u", "origin", "HEAD"], { stdio: "inherit" });
+    // 只推 main（-u 兼容首次推送时没有 upstream）
+    console.log("\x1b[36mPushing main to GitHub...\x1b[0m");
+    runGit(["push", "-u", "origin", "main"], { stdio: "inherit" });
 
     console.log("\x1b[32mSuccessfully pushed to GitHub!\x1b[0m");
 

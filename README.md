@@ -58,8 +58,10 @@ node scripts/beat.mjs --audio assets/bgm/新歌.mp3 --out assets/beats.json
 ## 提交
 
 ```bash
-node push.js "feat: 改了什么"     # add -A → commit → push → 打 tag
+node push.js "feat: 改了什么"     # main 上 add -A → commit → push origin main → 打 tag
 ```
+
+仓库只有 `main` 一条分支 + 版本 tag，不用特性分支：脚本会拒绝在非 `main` 分支上推送。
 
 VS Code 里也可以按 `F5` 选「🚀 Push to GitHub」（配置在 `.vscode/launch.json`）。
 
