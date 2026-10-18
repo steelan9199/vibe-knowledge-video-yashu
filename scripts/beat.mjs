@@ -22,7 +22,8 @@
  */
 
 import { spawn } from 'node:child_process';
-import { writeFile, mkdir } from 'node:fs/promises';
+import { writeFile, mkdir, readFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 
@@ -197,8 +198,15 @@ const snapped = beats.map(t => {
 
 const strong = snapped.filter((_, i) => i % STRONG_EVERY === 0);
 
+// 音频指纹：让 beats.json 能自证"我对应的是哪一份 mp3"。
+// 换歌 / 换母带后 build 会立刻发现不匹配，而不是默默沿用旧卡点。
+const audioBytes = await readFile(AUDIO);
+const md5 = createHash('md5').update(audioBytes).digest('hex');
+
 const data = {
   audio: path.basename(AUDIO),
+  audioMd5: md5,
+  audioBytes: audioBytes.length,
   duration: +dur.toFixed(2),
   bpm: +(60 / period).toFixed(2),
   period: +period.toFixed(5),

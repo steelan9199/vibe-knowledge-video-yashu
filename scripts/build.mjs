@@ -14,6 +14,7 @@
 
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -288,6 +289,18 @@ if (!NO_BEAT) {
   try {
     const bp = BEATS_FILE ? path.resolve(BEATS_FILE) : path.join(ROOT, 'assets', 'beats.json');
     beatData = JSON.parse(await readFile(bp, 'utf8'));
+
+    // 指纹对不上就别默默沿用旧卡点：换了 mp3 必须重跑 beat.mjs
+    if (beatData.audioMd5 && beatData.audio) {
+      const audioPath = path.join(ROOT, 'assets', 'bgm', beatData.audio);
+      if (existsSync(audioPath)) {
+        const md5 = createHash('md5').update(await readFile(audioPath)).digest('hex');
+        if (md5 !== beatData.audioMd5) {
+          console.error(`[build] 警告：${beatData.audio} 已变，但卡点表还是旧的指纹。重跑 scripts/beat.mjs 或加 --no-beat`);
+        }
+      }
+    }
+
     beatInfo = snapToOnsets(story.scenes, beatData);
     if (beatInfo && !QUIET) {
       console.error(`[build] 卡点：BPM ${beatInfo.bpm} · ${beatInfo.moved}/${story.scenes.length} 处切屏对齐击打 · 最大位移 ${beatInfo.maxShift}s`);

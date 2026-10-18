@@ -22,6 +22,12 @@
 
 ---
 
+### 2026-10-18 · 每次配同一首歌都要重跑 卡点分析，结果还可能不一致
+- 现象：每次配同一首歌都要重跑 卡点分析，结果还可能不一致
+- 根因：卡点只存在 assets/beats.json 里，没有人类可读的档案；换人/换会话第一反应是重新分析，而重新分析会重犯 v1 的 96BPM 错误
+- 改动：新增 references/beat-map-vibe.md（BPM/拍点表/圈头表/时长换算/禁忌）+ scripts/beats-info.mjs（--at/--snap/--check）；beats.json 写入 audioMd5/audioBytes，build 加载时校验指纹；beat.mjs 重跑结果已确认逐位一致（302 onsets 完全相同）
+- 判据：beats-info --check 返回 ok；--at 12.34 给出第 24 拍 12.269s；build 用默认 beats.json 输出 6/7 处切屏对齐
+
 ### 2026-10-18 · 卡点总觉得差半拍：beats.json 标 96 BPM，实际 112.98
 - 现象：卡点总觉得差半拍：beats.json 标 96 BPM，实际 112.98
 - 根因：beat.mjs v1 挑能量峰、拿峰间隔中位数当 BPM，MIN_GAP=0.22s 允许 272BPM 双触发；且用 24 秒压缩波形图肉眼判断，把鼓糊成噪声墙后误判'没有鼓'

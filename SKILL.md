@@ -1,7 +1,7 @@
 ---
 name: vibe-knowledge-video-yashu
 description: 把一段文案做成抖音「vibe 知识大赏」风格的竖屏知识视频（1080x1920 MP4）。用户给出文案、观点或选题，输出可直接发布的知识短视频。触发词：vibe知识、知识大赏、知识视频、把这段文案做成视频、竖屏知识视频、生成知识短视频、文案转视频。
-version: 1.4.0
+version: 1.5.0
 ---
 
 # Vibe 知识视频生成器
@@ -128,10 +128,17 @@ node scripts/run.mjs --story story.json --sheet out/sheet.png
 
 配乐不是"加个背景音"，**切屏必须落在鼓点上**，否则再好的文案也显得业余。
 
+> **配乐是固定的那首神曲，卡点已经测完并存成档案了 → `references/beat-map-vibe.md`**
+>
+> 关键数字：**112.98 BPM** · 一拍 **0.53106s** · 16 拍一圈 **8.497s** · 首拍 **0.055s** · 302 个拍点 / 19 个圈头。
+> **不要重跑分析、不要自己用公式推拍点、不要相信任何 96 BPM 的结论。**
+> 排片时长取 8.5s 的 1/1、1/2、1/3、1/4，切点自然落圈头。
+> 查具体时间点：`node scripts/beats-info.mjs --at 12.34`
+
 ```
 assets/bgm/vibe.mp3   （神曲，160s）
-        ↓ scripts/beat.mjs        周期 × 相位二维拟合
-assets/beats.json     { bpm, period, phase, onsets[302], strong[19], ratio, confidence }
+        ↓ scripts/beat.mjs        周期 × 相位二维拟合（换歌才跑）
+assets/beats.json     { bpm, period, phase, onsets[302], strong[19], audioMd5 }
         ↓ scripts/build.mjs       把每个切点推到最近的击打上（±0.5s 内）
 story.json 的 dur    → 实际时长被微调，输出里会打印"n/7 处切屏对齐击打"
         ↓ scripts/inject          同时把 onsets 注入 window.__BEATS__
@@ -139,9 +146,12 @@ story.json 的 dur    → 实际时长被微调，输出里会打印"n/7 处切�
 out/final.mp4
 ```
 
+`beats.json` 带音频 MD5 指纹：mp3 被换过时 `build.mjs` 会打警告、`beats-info.mjs --check` 退出码 1，
+不会拿旧卡点配新音频。
+
 **beat.mjs 只做一件事：找拍长和相位，不找"能量峰"。**
 
-| v1 的错（1.4.0 前） | v2 的做法 |
+| v1 的错（v2 之前） | v2 的做法 |
 |---|---|
 | 挑能量峰，拿峰间隔的中位数当 BPM | 自相关只给候选，period × phase 二维精扫定拍 |
 | 峰不规律 → BPM 是假的 | 输出 `ratio`（网格点 ÷ 半拍强度），<1.25 直接判"无可用节拍" |
@@ -174,15 +184,17 @@ build 会把击打点注入模板，`#beatcv` 那一层按时间戳画：
 | `--draft` | 2fps 试片，30 秒出结果 |
 | `--settle 40` | 每帧截图前等待毫秒数。**调小会闪帧**，机器过载调到 70 |
 
-**换歌两步**
+**换歌三步**
 
 ```bash
 cp 新歌.mp3 assets/bgm/
-node scripts/beat.mjs --audio assets/bgm/新歌.mp3 --out assets/beats.json
+node scripts/beat.mjs --audio assets/bgm/新歌.mp3 --out assets/beats.json --strong-every 16
+node scripts/beats-info.mjs                       # 看 BPM / 循环长度 / 指纹 ok
 ```
 
 跑完先看 `ratio` 和 `confidence`。**`confidence: low` 就别硬卡**——这条音频没有可用的节拍，
-换成"每屏落在整秒"或换歌，比假装卡点强。
+换成"每屏落在整秒"或换歌，比假装卡点强。确认可用后，把 BPM、循环长度、圈头表
+更新进 `references/beat-map-vibe.md`，下次就又能直接查表。
 
 **配乐没有鼓怎么办**
 
@@ -240,6 +252,7 @@ qa 的输出是**聚合后**的，同类问题一行，直接照做：
 | `scripts/run.mjs` | 一键流水线，串起 build→qa→render→终检 | 基本不动 |
 | `scripts/build.mjs` | 容量校验 + 卡点 + 把 story 注入模板 | 只改文案时不动 |
 | `scripts/beat.mjs` | 分析配乐，产出击打点表（周期×相位拟合） | 只有换歌时才跑 |
+| `scripts/beats-info.mjs` | 读已缓存的卡点表：概要 / `--at` 查拍 / `--snap` 对齐 / `--check` 指纹 | 排片期随时可用，不耗 CPU |
 | `scripts/verify-beats.mjs` | 独立校验节拍表：三频段分离 + 网格拟合 + 鼓组证据 | 怀疑卡点不准 / 换新配乐时先跑它 |
 | `scripts/make-drum-track.mjs` | 合成"鼓点真值已知"的基准音轨（96BPM） | 配乐没有可用节拍时 |
 | `scripts/qa.mjs` | 几何体检 / 联系图 / 黑屏终检 | 判定阈值不合理时才动 |
@@ -249,7 +262,8 @@ qa 的输出是**聚合后**的，同类问题一行，直接照做：
 | `assets/template.html` | 1080×1920 分镜模板（唯一视觉来源） | 只有换整片风格才动 |
 | `assets/fonts/` | 三份子集化字体 | 不要动 |
 | `assets/bgm/vibe.mp3` | 配乐神曲，默认启用 | 换歌时替换 |
-| `assets/beats.json` | 击打点时间表，卡点依据 | 由 `beat.mjs` 生成，不手改 |
+| `assets/beats.json` | 击打点时间表 + 音频指纹，卡点依据 | 由 `beat.mjs` 生成，不手改 |
+| `references/beat-map-vibe.md` | **曲目卡点档案**：BPM / 拍点表 / 圈头表 / 时长换算 / 禁忌 | 换歌或重测后同步更新 |
 | `references/learnings.md` | 经验日志，沉淀还没变成规则的东西 | 随 `learn.mjs` 自动写 |
 | `story.example.json` | 可直接改的样例 | 参考用 |
 
