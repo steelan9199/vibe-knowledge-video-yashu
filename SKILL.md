@@ -1,7 +1,7 @@
 ---
 name: vibe-knowledge-video-yashu
 description: 把一段文案做成抖音「vibe 知识大赏」风格的竖屏知识视频（1080x1920 MP4）。用户给出文案、观点或选题，输出可直接发布的知识短视频。触发词：vibe知识、知识大赏、知识视频、把这段文案做成视频、竖屏知识视频、生成知识短视频、文案转视频。
-version: 1.5.0
+version: 1.6.0
 ---
 
 # Vibe 知识视频生成器
@@ -130,15 +130,15 @@ node scripts/run.mjs --story story.json --sheet out/sheet.png
 
 > **配乐是固定的那首神曲，卡点已经测完并存成档案了 → `references/beat-map-vibe.md`**
 >
-> 关键数字：**112.98 BPM** · 一拍 **0.53106s** · 16 拍一圈 **8.497s** · 首拍 **0.055s** · 302 个拍点 / 19 个圈头。
-> **不要重跑分析、不要自己用公式推拍点、不要相信任何 96 BPM 的结论。**
+> 关键数字：**112.91 BPM** · 一拍 **0.53142s** · 16 拍一圈 **8.503s** · 首拍 **0.059s** · 301 个拍点 / 19 个圈头。
+> **不要重跑分析、不要自己用公式推拍点、不要相信任何 96 BPM 或 40ms 偏移的旧结论。**
 > 排片时长取 8.5s 的 1/1、1/2、1/3、1/4，切点自然落圈头。
 > 查具体时间点：`node scripts/beats-info.mjs --at 12.34`
 
 ```
 assets/bgm/vibe.mp3   （神曲，160s）
         ↓ scripts/beat.mjs        周期 × 相位二维拟合（换歌才跑）
-assets/beats.json     { bpm, period, phase, onsets[302], strong[19], audioMd5 }
+assets/beats.json     { bpm, period, phase, onsets[301], strong[19], audioMd5 }
         ↓ scripts/build.mjs       把每个切点推到最近的击打上（±0.5s 内）
 story.json 的 dur    → 实际时长被微调，输出里会打印"n/7 处切屏对齐击打"
         ↓ scripts/inject          同时把 onsets 注入 window.__BEATS__
@@ -157,9 +157,11 @@ out/final.mp4
 | 峰不规律 → BPM 是假的 | 输出 `ratio`（网格点 ÷ 半拍强度），<1.25 直接判"无可用节拍" |
 | `MIN_GAP=0.22s` 允许 272BPM 双触发 | 拍长锁在 80–150BPM，网格点吸附 ±25ms 到真实音头 |
 
-实测：vibe.mp3 被 v1 测成 **96 BPM**，实际 **112.98 BPM / period 0.53106s**。差 17%，
-第 20 拍起就错位半个拍子——听感上就是"卡点没卡上"。v2 的 302 个拍点，高频起音峰值
-全部落在拍点 **0ms** 处（10ms 分辨率）。
+实测两轮修正：v1 测成 **96 BPM**（实际 112.9），差 17%，第 20 拍起就错位半个拍子；
+v2 的 BPM 对了，但整表相位**早约 40ms**（一帧 33ms），因为它的包络按"帧起始"对齐、
+且拿它自己吸附自己，属于循环验证。v3 用 librosa 的 DP 跟踪定周期相位、
+再抛物线插值吸到起音峰，峰位 **0ms**、峰背比 3.63→**5.53**、网格抖动 15→**5.8ms**。
+详见 `references/beat-map-vibe.md` 第 3 节。
 
 **每拍都要有视觉事件（`__BEATS__`）**
 
@@ -190,6 +192,10 @@ build 会把击打点注入模板，`#beatcv` 那一层按时间戳画：
 cp 新歌.mp3 assets/bgm/
 node scripts/beat.mjs --audio assets/bgm/新歌.mp3 --out assets/beats.json --strong-every 16
 node scripts/beats-info.mjs                       # 看 BPM / 循环长度 / 指纹 ok
+
+# 要精度（推荐）：用 librosa 重算一遍，峰位会从 +40ms 收到 0ms
+.venv/Scripts/python.exe scripts/refine-beats.py \
+    --audio assets/bgm/新歌.mp3 --out assets/beats.json
 ```
 
 跑完先看 `ratio` 和 `confidence`。**`confidence: low` 就别硬卡**——这条音频没有可用的节拍，
@@ -251,7 +257,8 @@ qa 的输出是**聚合后**的，同类问题一行，直接照做：
 |---|---|---|
 | `scripts/run.mjs` | 一键流水线，串起 build→qa→render→终检 | 基本不动 |
 | `scripts/build.mjs` | 容量校验 + 卡点 + 把 story 注入模板 | 只改文案时不动 |
-| `scripts/beat.mjs` | 分析配乐，产出击打点表（周期×相位拟合） | 只有换歌时才跑 |
+| `scripts/beat.mjs` | 分析配乐，产出击打点表（周期×相位拟合，纯 Node 零依赖） | 只有换歌时才跑；相位会早 20–40ms，要精度改用下面那个 |
+| `scripts/refine-beats.py` | **精度模式**：librosa DP 定周期相位 + 抛物线插值吸附，峰位可到 0ms | 换歌 / 换母带 / 要求更准时 |
 | `scripts/beats-info.mjs` | 读已缓存的卡点表：概要 / `--at` 查拍 / `--snap` 对齐 / `--check` 指纹 | 排片期随时可用，不耗 CPU |
 | `scripts/verify-beats.mjs` | 独立校验节拍表：三频段分离 + 网格拟合 + 鼓组证据 | 怀疑卡点不准 / 换新配乐时先跑它 |
 | `scripts/make-drum-track.mjs` | 合成"鼓点真值已知"的基准音轨（96BPM） | 配乐没有可用节拍时 |
