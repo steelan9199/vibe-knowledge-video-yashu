@@ -22,6 +22,12 @@
 
 ---
 
+### 2026-10-18 · 成片大数字清楚，但 BPM 单位与说明文字在手机上糊成一片，用户看不清
+- 现象：成片大数字清楚，但 BPM 单位与说明文字在手机上糊成一片，用户看不清
+- 根因：次要文字用了 #B4AC9C/#6F695C（后者只有 3.6:1）+ 300 字重，深底细笔画过一遍视频压缩就没了；qa 只量几何，从不量对比度
+- 改动：assets/template.html：--ink-2→#E2DCCE、--ink-dim→#C9C2B2、小字统一 500 字重；scripts/qa.mjs 新增 low-contrast（<48px 要 9:1，大字 4.5:1）；design-system.md 写判据；SKILL.md 加第五条铁律
+- 判据：node scripts/qa.mjs --html out/story.html（应 0 错，且不再有 low-contrast）
+
 ### 2026-10-18 · stat 屏每次都被 qa 判 too-sparse（文字覆盖 2%），但画面正常
 - 现象：stat 屏每次都被 qa 判 too-sparse（文字覆盖 2%），但画面正常
 - 根因：密度判据只看文字块面积，stat 的主体是 300px 大数字，面积占比天然极低

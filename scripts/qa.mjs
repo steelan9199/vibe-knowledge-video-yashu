@@ -116,6 +116,7 @@ const MEASURE = `(() => {
     const r = loc(el.getBoundingClientRect());
     if (r.w < 4 || r.h < 4) continue;
     blocks.push({ kind, rect: r, fontSize: parseFloat(cs.fontSize),
+      color: cs.color, weight: cs.fontWeight,
       clippedX: el.scrollWidth > el.clientWidth + 2,
       clippedY: el.scrollHeight > el.clientHeight + 2 });
   }
@@ -153,6 +154,21 @@ if (VIDEO_ONLY) {
 const MIN_PX = { title: 56, quote: 40, body: 34, label: 30, cite: 18, kicker: 20, num: 120, unit: 26 };
 const TEXTY = ['title', 'quote', 'body', 'label'];
 
+// 小字对比度：手机上 + 视频压缩后，深底暗字会糊成一片。
+// 底色取模板 --bg-mid（#0B0C10），实际有暗角只会更暗，所以这是下限估计。
+const BG_RGB = [11, 12, 16];
+const lumOf = (rgb) => {
+  const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+  return 0.2126 * f(rgb[0]) + 0.7152 * f(rgb[1]) + 0.0722 * f(rgb[2]);
+};
+const parseRgb = (s) => (String(s).match(/\d+(\.\d+)?/g) || []).slice(0, 3).map(Number);
+const contrastOf = (fgStr) => {
+  const fg = parseRgb(fgStr);
+  if (fg.length < 3) return null;
+  const a = lumOf(fg), b = lumOf(BG_RGB);
+  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+};
+
 function judge(sc, m) {
   const tag = `S${String(sc.i + 1).padStart(2, '0')}`;
   const b = Object.fromEntries(m.blocks.map(x => [x.kind, x]));
@@ -165,6 +181,12 @@ function judge(sc, m) {
     if (r.bottom > H - SAFE_BOTTOM + 2) add('err', 'safe-bottom', tag, `${blk.kind} 底部 ${r.bottom.toFixed(0)}px 越过 ${H - SAFE_BOTTOM}px 边界（超 ${(r.bottom - (H - SAFE_BOTTOM)).toFixed(0)}px）`, '该屏减 1 行字，或拆到下一屏');
     const min = MIN_PX[blk.kind];
     if (min && blk.fontSize < min - 0.5) add('err', 'font-small', tag, `${blk.kind} 字号 ${blk.fontSize}px < ${min}px`, '减字，不要缩字号硬塞');
+    // 对比度：≥48px 算大字号（4.5:1），小字要求 7:1 —— 抖音压缩 + 手机小屏会再掉一档
+    const cr = contrastOf(blk.color);
+    if (cr) {
+      const need = blk.fontSize >= 48 ? 4.5 : 9;
+      if (cr < need) add('err', 'low-contrast', tag, `${blk.kind} ${blk.fontSize}px 对比仅 ${cr.toFixed(1)}:1（要求 ${need}:1）`, '提亮 --ink-2/--ink-dim，或把这档字重改成 500');
+    }
   }
 
   // 引号是装饰字形，墨迹只占 em 框上沿，与正文盒子交叠属设计意图
