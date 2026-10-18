@@ -1,7 +1,7 @@
 ---
 name: vibe-knowledge-video-yashu
 description: 把一段文案做成抖音「vibe 知识大赏」风格的竖屏知识视频（1080x1920 MP4）。用户给出文案、观点或选题，输出可直接发布的知识短视频。触发词：vibe知识、知识大赏、知识视频、把这段文案做成视频、竖屏知识视频、生成知识短视频、文案转视频。
-version: 1.6.1
+version: 1.6.4
 ---
 
 # Vibe 知识视频生成器
@@ -204,6 +204,7 @@ qa 的输出是**聚合后**的，同类问题一行，直接照做：
 | `fx-intrudes` | 图形侵入底部 | 该屏去掉 `fx` |
 | `black-frame` | 有黑屏 | 检查该屏 `dur` 是否 ≥ 4s |
 | `flash-frame` | 成片里 1–2 帧闪出别的画面 | 不动 story：`render.mjs` 每帧已等 `--settle`（默认 40ms）并自动重截体积异常帧；机器过载时把 `--settle 70` 再渲一遍 |
+| 画面全黑 / 元素不出现，但**没有任何报错** | 异常被 catch 吞掉，`__ready` 仍为 true | 见 `troubleshooting.md` §2「静默失败」。渲染前先跑一次 `msedge --headless=new --dump-dom file:///…/story.html \| grep -oE 'data-(boot\|err)="[^"]*"'`，`data-boot` 必须是 `OK` 且带 `idx=<数字>`、`cls=… on` |
 
 **不要**为了过检去改模板 CSS —— 模板是标定过的，改它会让所有片子一起坏。
 
@@ -246,6 +247,15 @@ qa 的输出是**聚合后**的，同类问题一行，直接照做：
 | `references/beat-map-vibe.md` | **曲目卡点档案**：BPM / 拍点表 / 圈头表 / 时长换算 / 禁忌 | 换歌或重测后同步更新 |
 | `references/learnings.md` | 经验日志，沉淀还没变成规则的东西 | 随 `learn.mjs` 自动写 |
 | `story.example.json` | 可直接改的样例 | 参考用 |
+
+**浏览器规则（硬性）**
+
+WorkBuddy 已经为该环境授权 **Edge 浏览器自动化**（设置 → 模型/助手 → 「让 WorkBuddy 控制浏览器」→ WorkBuddy Edge 扩展程序）。
+
+- **一律用 Microsoft Edge，不要用 Chrome。** 本机的 Chrome 与 WorkBuddy 的自动化授权无关，混用会出现"能连上、但截不出帧"的静默失败。
+- `render.mjs` 的 `findBrowser()` 按 **Edge → Chrome** 顺序探测，选到 Chrome 时会往 stderr 打警告。渲染日志第一行 `[render] Browser: …` 就是实际使用的浏览器，出片前先看这一行是不是 `msedge.exe`。
+- 要显式指定：`--browser "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"`。
+- **不要**为了跑渲染去装 Chrome、改 PATH、或把 `--browser` 指向 Chrome——授权的浏览器只有一个。
 
 **为什么不做"正经分层架构"**
 

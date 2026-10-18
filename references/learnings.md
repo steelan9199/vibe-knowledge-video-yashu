@@ -22,6 +22,18 @@
 
 ---
 
+### 2026-10-18 · __ready 为 true、__error 为 null，但整片全黑
+- 现象：__ready 为 true、__error 为 null，但整片全黑
+- 根因：window.seek 包装函数与同名函数声明同名，赋值后包装函数调用自己形成无限递归，爆栈被内层 catch 吞掉，真正的 seek 一次都没执行
+- 改动：references/troubleshooting.md 新增§2静默失败：先存 seekImpl 再包装；自检必须打印 idx 与 cls（只打印 OK 等于没打印）；SKILL.md §5 加入口
+- 判据：dump-dom 抓到 data-boot="OK | idx=0 … cls=scene … on"
+
+### 2026-10-18 · 渲染偶发直接失败，只报 fetch failed，无其他信息
+- 现象：渲染偶发直接失败，只报 fetch failed，无其他信息
+- 根因：DevToolsActivePort 文件写入时 HTTP 调试服务还没开始监听；waitForPort 之后立刻 fetch /json/version 会 ECONNREFUSED，且原实现没有重试
+- 改动：scripts/render.mjs：/json/version 请求改为最多 40 次重试、间隔 120ms，失败时报出端口号与最后错误
+- 判据：连续跑 node scripts/render.mjs --html out/story.html --limit 3 三次均成功
+
 ### 2026-10-18 · 新写的 flash-frame 检测对合成闪帧片判「通过」，等于完全失效
 - 现象：新写的 flash-frame 检测对合成闪帧片判「通过」，等于完全失效
 - 根因：两处坑：① signalstats 把近零值写成 8.68e-05，正则 [\d.]+ 截成 8.68 制造假尖峰；② 闪帧的帧差特征是 H,H 或 H,L,H（两处突变夹住残帧），原判据写成「连续 ≥2 帧高」,对 H,L,H 和 H,H,H 全部漏判

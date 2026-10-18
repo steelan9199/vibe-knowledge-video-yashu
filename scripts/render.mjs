@@ -67,20 +67,27 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 function findBrowser() {
   if (args.browser) return args.browser;
   if (args.chrome) return args.chrome; // 兼容旧参数
-  const candidates = [
+  // WorkBuddy 只授权 Edge 自动化：Edge 永远优先，Chrome 仅作最后回退（会打警告）
+  const EDGE = [
     'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
     'C:/Program Files/Microsoft/Edge/Application/msedge.exe',
+    '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
+    '/usr/bin/microsoft-edge',
+  ];
+  const CHROME = [
     'C:/Program Files/Google/Chrome/Application/chrome.exe',
     'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
     `${process.env.LOCALAPPDATA}/Google/Chrome/Application/chrome.exe`,
-    '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
     '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-    '/usr/bin/microsoft-edge',
     '/usr/bin/google-chrome',
     '/usr/bin/chromium',
   ];
-  for (const c of candidates) if (c && existsSync(c)) return c;
-  fail('找不到 Edge/Chrome，请用 --browser <路径> 指定');
+  for (const c of EDGE) if (c && existsSync(c)) return c;
+  for (const c of CHROME) if (c && existsSync(c)) {
+    console.error('[render] 警告：没找到 Edge，回退到 Chrome。本机渲染应当使用 Edge（WorkBuddy 只授权了 Edge 自动化）。');
+    return c;
+  }
+  fail('找不到 Edge（应当优先使用已授权的 Microsoft Edge）。请用 --browser <路径> 指定 Edge 的 msedge.exe');
 }
 
 function findFfmpeg() {
@@ -207,7 +214,19 @@ async function waitForPort(portFile, timeoutMs = 20000) {
       throw new Error(`${e.message}\nBrowser stderr:\n${browserErr.slice(-1500)}`);
     });
 
-    const version = await (await fetch(`http://127.0.0.1:${port}/json/version`)).json();
+    // DevToolsActivePort 写入 ≠ HTTP 服务已监听，紧接着 fetch 会偶发 ECONNREFUSED。
+    // 必须重试，否则表现为 "fetch failed" 且无法定位（换机器/负载高时更容易命中）。
+    let version = null, lastErr = null;
+    for (let i = 0; i < 40; i++) {
+      try {
+        version = await (await fetch(`http://127.0.0.1:${port}/json/version`)).json();
+        break;
+      } catch (e) {
+        lastErr = e;
+        await sleep(120);
+      }
+    }
+    if (!version) fail(`连不上浏览器调试端口 ${port}（重试 40 次仍失败）：${lastErr?.message || ''}`);
     cdp = await Cdp.connect(version.webSocketDebuggerUrl);
 
     // 2) 新开 target
