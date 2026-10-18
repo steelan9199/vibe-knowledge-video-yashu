@@ -25,7 +25,7 @@ node push.js "feat: 改了什么"                                  # 只推 main
 SKILL.md                技能说明：铁律 / 流水线 / 字段契约 / 自进化协议
 story.example.json      输入样例（唯一输入格式）
 push.js                 提交 + 推 main + 打 tag
-scripts/                run · build · beat · qa · render · learn
+scripts/                run · build · beat · qa · render · learn · selfcheck
 assets/                 template.html · beats.json · fonts/ · bgm/vibe.mp3
 references/             copywriting · design-system · troubleshooting · learnings
 ```

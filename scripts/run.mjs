@@ -93,3 +93,5 @@ const secs = (() => {
 
 console.log(`\n✓ 完成 ${secs}s · ${info.frames || '?'} 帧 · ${mb}MB · 音轨 ${info.bgm || '?'} · 用时 ${mark()}`);
 console.log(`  ${OUT}${SHEET ? `\n  联系图 ${SHEET}` : ''}`);
+// 自进化协议的触发器：每次都出现，避免「想起来才沉淀」
+console.log('  ▸ 有新事实？selfcheck.mjs → learn.mjs add → push.js "learn: …"（SKILL.md §9）');
